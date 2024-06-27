@@ -1,0 +1,41 @@
+ <source lang="xml"> <ServerManagerConfiguration>
+ <ProxyGroup name="filters">
+  <SourceProxy name="MyMarchingCubes" class="vtkMarchingCubes" label="My Marching Cubes">
+    <Documentation
+       long_help="vtkMarchingCubes is a filter that takes as input a volume (e.g., 3D structured point set) and generates on output one or more isosurfaces. One or more contour values must be specified to generate the isosurfaces. Alternatively, you can specify a min/max scalar range and the number of contours to generate a series of evenly spaced contour values."
+       short_help="generate isosurface(s) from volume">
+    </Documentation>
+    <InputProperty
+       name="Input"
+       command="SetInputConnection">
+          <ProxyGroupDomain name="groups">
+            <Group name="sources"/>
+            <Group name="filters"/>
+          </ProxyGroupDomain>
+          <DataTypeDomain name="input_type">
+            <DataType value="vtkDataSet"/>
+          </DataTypeDomain>
+     </InputProperty>
+
+     <DoubleVectorProperty animateable="1"
+                            command="SetValue"
+                            label="Isosurfaces"
+                            name="ContourValues"
+                            number_of_elements="0"
+                            number_of_elements_per_command="1"
+                            repeat_command="1"
+                            set_number_command="SetNumberOfContours"
+                            use_index="1">
+        <ArrayRangeDomain name="scalar_range">
+          <RequiredProperties>
+            <Property function="Input"
+                      name="Input" />
+          </RequiredProperties>
+        </ArrayRangeDomain>
+        <Documentation>This property specifies the values at which to compute
+        isosurfaces/isolines and also the number of such
+        values.</Documentation>
+      </DoubleVectorProperty>
+  </SourceProxy>
+</ProxyGroup>
+</ServerManagerConfiguration> </source>

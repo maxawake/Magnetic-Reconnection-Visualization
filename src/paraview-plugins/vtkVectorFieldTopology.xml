@@ -1,0 +1,165 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkVectorFieldTopology"
+                  label="Vector Field Topology"
+                  name="VectorFieldTopology">
+      <Documentation long_help="vtkVectorFieldTopology is a filter that extracts the critical points and the 1D separatrices
+                      (lines)"
+                      short_help="Extract the topological skeleton as output datasets">
+                      vtkVectorFieldTopology is a filter that extracts the critical points and the 1D separatrices
+                      (lines) If the data is 3D and the user enables ComputeSurfaces, also the 2D separatrices are
+                      computed (surfaces)</Documentation>
+      <InputProperty command="SetInputConnection"
+                      name="Input">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources" />
+          <Group name="filters" />
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPointSet" />
+          <DataType value="vtkImageData" />
+          <DataType value="vtkRectilinearGrid" />
+        </DataTypeDomain>
+        <InputArrayDomain attribute_type="point"
+                          name="input_array"
+                          number_of_components="3" />
+        <Documentation>This property specifies the input to the Warp (vector)
+        filter.</Documentation>
+      </InputProperty>
+      <StringVectorProperty command="SetInputArrayToProcess"
+                            element_types="0 0 0 0 2"
+                            label="Vectors"
+                            name="SelectInputVectors"
+                            number_of_elements="5"
+                            panel_visibility="default">
+        <ArrayListDomain attribute_type="Vectors"
+                          name="array_list">
+          <RequiredProperties>
+            <Property function="Input"
+                      name="Input" />
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>The value of this property contains the name of the
+        vector array by which to warp the dataset's point
+        coordinates.</Documentation>
+      </StringVectorProperty>
+      <!-- <DoubleVectorProperty command="SetScaleFactor"
+                            default_values="1.0"
+                            name="ScaleFactor"
+                            number_of_elements="1"
+                            panel_visibility="default">
+        <BoundsDomain name="range" mode="array_scaled_extent">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+            <Property function="ArraySelection" name="SelectInputVectors" />
+          </RequiredProperties>
+        </BoundsDomain>
+        <Hints>
+          <NoDefault/>
+        </Hints>
+        <Documentation>Each component of the selected vector array will be
+        multiplied by the value of this property before being used to compute
+        new point coordinates.</Documentation>
+      </DoubleVectorProperty> -->
+
+      <IntVectorProperty command="SetUseIterativeSeeding"
+                         default_values="1"
+                         name="UseIterativeSeeding"
+                         number_of_elements="1">
+        <BooleanDomain name="bool" />
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetComputeSurfaces"
+                         default_values="1"
+                         name="ComputeSurfaces"
+                         number_of_elements="0">
+        <BooleanDomain name="bool" />
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetExcludeBoundary"
+                         default_values="1"
+                         name="ExcludeBoundary"
+                         number_of_elements="0">
+        <BooleanDomain name="bool" />
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetUseBoundarySwitchPoints"
+                         default_values="1"
+                         name="UseBoundarySwitchPoints"
+                         number_of_elements="0">
+        <BooleanDomain name="bool" />
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetIntegrationStepUnit"
+                         name="IntegrationStepUnit"
+                         number_of_elements="1"
+                         default_values="2">
+        <Documentation>Specify a uniform integration step unit for MinimumIntegrationStep,
+            * InitialIntegrationStep, and MaximumIntegrationStep.
+            * 1 = LENGTH_UNIT, i.e. all sizes are expresed in coordinate scale or cell scale
+            * 2 = CELL_LENGTH_UNIT, i.e. all sizes are expresed in cell scale</Documentation>
+      </IntVectorProperty>
+
+
+      <IntVectorProperty command="SetMaxNumSteps"
+                         name="MaxNumSteps"
+                         number_of_elements="1"
+                         default_values="100">
+        <Documentation>Specify/see the maximal number of iterations in this class and in vtkStreamTracer</Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetIntegrationStepSize"
+                            default_values="1.0"
+                            name="IntegrationStepSize"
+                            number_of_elements="1"
+                            panel_visibility="default">
+        <Documentation>Specify the Initial, minimum, and maximum step size used for line integration,
+          expressed in IntegrationStepUnit</Documentation>
+      </DoubleVectorProperty>
+
+
+      <DoubleVectorProperty command="SetSeparatrixDistance"
+                            default_values="1.0"
+                            name="SeparatrixDistance"
+                            number_of_elements="1"
+                            panel_visibility="default">
+        <Documentation>Specify/see the distance by which the seedpoints of the separatrices are placed away from the
+            saddle expressed in IntegrationStepUnit</Documentation>
+      </DoubleVectorProperty>
+
+
+      <DoubleVectorProperty command="SetVectorAngleThreshold"
+                            default_values="1.0"
+                            name="VectorAngleThreshold"
+                            number_of_elements="1"
+                            panel_visibility="default">
+        <Documentation>Specify the VectorAngleThreshold to remove noisy boundary switch points/lines
+            When computing boundary switch point, if the vectors of the two points within a cell are almost
+            parallel, the boundary switch point computed is considered as a noise point. Let v0 and v1 be
+            the vectors of the two points, and their norm equal to 1. The dot product between them
+            Dot(v0,v1) = cos(theta), where theta is the angle between v0 and v1. When v0 and v1 are almost
+            parallel, abs(Dot(v0,v1)) is close to 1. The range of this threshold is [0,1]. For any
+            abs(Dot(v0,v1)) > VectorAngleThreshold, the boundary switch point computed is a noise point.</Documentation>
+      </DoubleVectorProperty>
+
+
+      <DoubleVectorProperty command="SetOffsetAwayFromBoundary"
+                            default_values="1e-3"
+                            name="OffsetAwayFromBoundary"
+                            number_of_elements="1"
+                            panel_visibility="default">
+        <Documentation>Specify the OffsetAwayFromBoundary to shift seeds for computing separating lines/surfaces</Documentation>
+      </DoubleVectorProperty>
+
+
+      <DoubleVectorProperty command="SetEpsilonCriticalPoint"
+                            default_values="1e-10"
+                            name="EpsilonCriticalPoint"
+                            number_of_elements="1"
+                            panel_visibility="default">
+        <Documentation>Specify EpsilonCriticalPoint for classifying critical points. The default is 1e-10</Documentation>
+      </DoubleVectorProperty>
+      <!-- End WarpVector -->
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

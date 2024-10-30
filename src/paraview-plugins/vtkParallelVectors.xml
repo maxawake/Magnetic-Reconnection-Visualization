@@ -1,0 +1,67 @@
+ <source lang="xml"> <ServerManagerConfiguration>
+ <ProxyGroup name="filters">
+  <SourceProxy name="vtkParallelVectors" class="vtkParallelVectors" label="VTK Parallel Vectors">
+    <Documentation
+       long_help="Get lines from parallel vectors operator"
+       short_help="parallel vectors operator">
+    </Documentation>
+    <InputProperty
+       name="Input"
+       command="SetInputConnection">
+          <ProxyGroupDomain name="groups">
+            <Group name="sources"/>
+            <Group name="filters"/>
+          </ProxyGroupDomain>
+          <DataTypeDomain name="input_type">
+            <DataType value="vtkDataSet"/>
+          </DataTypeDomain>
+          <InputArrayDomain name="array_vector"
+                                  number_of_components="3"
+                                  optional="0" />
+          <InputArrayDomain name="array_vector_2"
+                            number_of_components="3"
+                            optional="1" />
+     </InputProperty>
+
+      <StringVectorProperty command="SetFirstVectorFieldName"
+                            element_types="0 0 0 0 2"
+                            label="Vectors1"
+                            name="FirstVectorFieldName"
+                            number_of_elements="5"
+                            panel_visibility="default">
+        <ArrayListDomain attribute_type="Vectors"
+                                 input_domain_name="array_vector"
+                                 name="array_list">
+          <RequiredProperties>
+            <Property function="Input"
+                      name="Input" />
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>The value of this property contains the name of the
+        vector array by which to warp the dataset's point
+        coordinates.</Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty command="SetSecondVectorFieldName"
+                            element_types="0 0 0 0 2"
+                            label="Vectors2"
+                            name="SecondVectorFieldName"
+                            number_of_elements="5"
+                            panel_visibility="default">
+        <ArrayListDomain attribute_type="Vectors"
+                                 input_domain_name="array_vector_2"
+                                 name="array_list_2">
+          <RequiredProperties>
+            <Property function="Input"
+                      name="Input" />
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>The value of this property contains the name of the
+        vector array by which to warp the dataset's point
+        coordinates.</Documentation>
+      </StringVectorProperty>
+
+
+  </SourceProxy>
+</ProxyGroup>
+</ServerManagerConfiguration> </source>

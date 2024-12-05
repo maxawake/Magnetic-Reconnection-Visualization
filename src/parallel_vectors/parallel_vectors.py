@@ -96,6 +96,40 @@ def mat3real_eigenvector(m, lambda_val):
     return None, False
 
 
+def compute_jacobian(v, i, j, k, dim_x, dim_y, dim_z, spacing_x, spacing_y, spacing_z):
+    """
+    Compute the Jacobian matrix for the vector field `v` at grid point (i, j, k).
+    """
+    def get_vector(x, y, z):
+        return v[x, y, z] if 0 <= x < dim_x and 0 <= y < dim_y and 0 <= z < dim_z else np.zeros(3)
+
+    # Partial derivatives using central difference, with forward/backward difference at boundaries
+    dv_dx = (
+        (get_vector(i + 1, j, k) - get_vector(i - 1, j, k)) / (2 * spacing_x)
+        if 0 < i < dim_x - 1
+        else (get_vector(i + 1, j, k) - get_vector(i, j, k)) / spacing_x
+        if i == 0
+        else (get_vector(i, j, k) - get_vector(i - 1, j, k)) / spacing_x
+    )
+    dv_dy = (
+        (get_vector(i, j + 1, k) - get_vector(i, j - 1, k)) / (2 * spacing_y)
+        if 0 < j < dim_y - 1
+        else (get_vector(i, j + 1, k) - get_vector(i, j, k)) / spacing_y
+        if j == 0
+        else (get_vector(i, j, k) - get_vector(i, j - 1, k)) / spacing_y
+    )
+    dv_dz = (
+        (get_vector(i, j, k + 1) - get_vector(i, j, k - 1)) / (2 * spacing_z)
+        if 0 < k < dim_z - 1
+        else (get_vector(i, j, k + 1) - get_vector(i, j, k)) / spacing_z
+        if k == 0
+        else (get_vector(i, j, k) - get_vector(i, j, k - 1)) / spacing_z
+    )
+
+    # Combine into Jacobian matrix
+    return np.column_stack((dv_dx, dv_dy, dv_dz))
+
+
 def solve_parallel_vectors(v, w, dimensions, origin, spacing, feature, feature_strength):
     """
     Solve parallel vectors field with implicit, bifurcation, or vortex core feature.
@@ -116,27 +150,36 @@ def solve_parallel_vectors(v, w, dimensions, origin, spacing, feature, feature_s
             continue
 
         # Extract local vectors for computation
-        v_cell = np.array([
-            v[i, j, k],
-            v[i + 1, j, k],
-            v[i, j + 1, k],
-            v[i + 1, j + 1, k]
-        ])
+        v_cell = np.array(
+            [
+                v[i, j, k],
+                v[i + 1, j, k],
+                v[i, j + 1, k],
+                v[i + 1, j + 1, k],
+            ]
+        )
+        w_cell = np.array(
+            [
+                w[i, j, k],
+                w[i + 1, j, k],
+                w[i, j + 1, k],
+                w[i + 1, j + 1, k],
+            ]
+        )
 
-        w_cell = np.array([
-            w[i, j, k],
-            w[i + 1, j, k],
-            w[i, j + 1, k],
-            w[i + 1, j + 1, k]
-        ])
+        # Compute Jacobian
+        jacobian = compute_jacobian(v, i, j, k, dim_x, dim_y, dim_z, spacing_x, spacing_y, spacing_z)
 
-        # Compute Jacobian and other matrix-related quantities
-        matrix = np.random.random((3, 3))  # Example placeholder, replace with actual calculation
+        # Compute eigenvalues
+        num_real, eigenvalues = mat3eigenvalues(jacobian)
 
-        # Eigenvalue computation for features
-        num_real, eigenvalues = mat3eigenvalues(matrix)
-        if num_real == 1:
-            result[idx] = eigenvalues[0]  # Replace with more detailed logic as needed
+        if num_real == 1 and feature == 2:  # Example feature type: vortex core
+            strength = abs(eigenvalues[2])  # Imaginary part
+            if strength >= feature_strength:
+                # Store the eigenvector corresponding to the feature
+                eigenvector, valid = mat3real_eigenvector(jacobian, eigenvalues[0])
+                if valid:
+                    result[idx] = eigenvector
 
     return result
 
@@ -236,7 +279,7 @@ if __name__ == "__main__":
     field = field.transpose((1, 2, 3, 0))
     result = result.transpose((1, 2, 3, 0))
     
-    result = solve_parallel_vectors(field, result, dimensions, origin, spacing, feature=1, feature_strength=0.1) 
+    result = solve_parallel_vectors(field, result, dimensions, origin, spacing, feature=2, feature_strength=0.1) 
     print(result)
     unittest.main()
 

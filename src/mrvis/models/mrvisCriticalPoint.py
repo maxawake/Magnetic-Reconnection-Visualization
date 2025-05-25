@@ -1,32 +1,29 @@
-__all__ = ["prtlModelCriticalPoint"]
-from pyprtl.util.logging import Log
-from pyprtl.models.ModelBase import *
-from typing import Union
+from mrvis.models.ModelBase import *
 import numpy as np
 
 
-@smproxy.source(label="PRTL Model Critical Point")
-@prtl_model(dimensions=[64, 64, 64], extent=[-1, 1, -1, 1, -1, 1])
-class prtlModelCriticalPoint(prtlModelBase):
+@smproxy.source(label="MRVIS Model Critical Point")
+@mrvis_model(dimensions=[64, 64, 64], extent=[-1, 1, -1, 1, -1, 1])
+class mrvisModelCriticalPoint(mrvisModelBase):
     def __init__(self):
         self._epsilon = 0
         self._typeID = 0
-        prtlModelBase.__init__(self)
+        mrvisModelBase.__init__(self)
 
     @smproperty.intvector(label="Type", name="Type", default_values=0)
-    @smdomain_enumeration(
-        [
-            "Source",
-            "Sink",
-            "Saddle 12",
-            "Saddle 21",
-            "Spiral Source",
-            "Spiral Sink",
-            "Spiral Saddle 12",
-            "Spiral Saddle 21",
-        ],
-        [0, 1, 2, 3, 4, 5, 6, 7],
-    )
+    # @smdomain_enumeration(
+    #     [
+    #         "Source",
+    #         "Sink",
+    #         "Saddle 12",
+    #         "Saddle 21",
+    #         "Spiral Source",
+    #         "Spiral Sink",
+    #         "Spiral Saddle 12",
+    #         "Spiral Saddle 21",
+    #     ],
+    #     [0, 1, 2, 3, 4, 5, 6, 7],
+    # )
     def SetType(self, n):
         self._typeID = n
 

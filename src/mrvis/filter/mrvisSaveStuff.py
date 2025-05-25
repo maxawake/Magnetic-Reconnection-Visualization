@@ -1,19 +1,15 @@
-__all__ = ["prtlExtractByType"]
+from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
 
-from pyprtl.util.vtkAlgorithm import *
 from vtkmodules.vtkCommonDataModel import vtkImageData, vtkDataSet, vtkDataObject, vtkPolyData
-from vtkmodules.util.vtkAlgorithm import VTKPythonAlgorithmBase
 from vtkmodules.numpy_interface import dataset_adapter as dsa
-from vtkmodules.vtkCommonCore import vtkPoints
 import os
 import paraview.simple as pv
 
 
-@smproxy.filter(label="PRTL Extract By Type")
-@smhint_menu("prtl")
+@smproxy.filter(label="MRVIS Save Stuff")
 @smproperty.input(name="Input", port_index=0)
 @smdomain.datatype(dataTypes=["vtkDataSet"])
-class prtlExtractByType(VTKPythonAlgorithmBase):
+class mrvisSaveStuff(VTKPythonAlgorithmBase):
     def __init__(self):
         self._array_field = 0
         self._array_name = None
@@ -26,11 +22,9 @@ class prtlExtractByType(VTKPythonAlgorithmBase):
         self._array_name = name
         self.Modified()
 
-    @smproperty.intvector(name="Type ID", label="Type ID", default_values=0)
-    @smdomain.intrange(min=0, max=6)
-    def SetTypeID(self, i):
-        self._typeID = i
-        self.Modified()
+    @smproperty.stringvector(name="Save Path")  # Added save path property
+    def SetSavePath(self, path):
+        self._save_path = path
 
     def RequestDataObject(self, request, inInfo, outInfo):
         inp = vtkDataSet.GetData(inInfo[0], 0)
@@ -65,29 +59,30 @@ class prtlExtractByType(VTKPythonAlgorithmBase):
         input = vtkPolyData.GetData(inInfo[0], 0)
         output = dsa.WrapDataObject(vtkPolyData.GetData(outInfo, 0))
 
-        # Get the point data
-        point_data = input.GetPointData()
+        # Get the current time step
+        time_step = pv.GetAnimationScene().TimeKeeper.Time
 
-        # Get the array containing the point ids
-        point_ids_array = point_data.GetArray("typeDetailed")
+        # Save the number of points to a text file
+        num_points = input.GetNumberOfPoints()
+        save_path = os.path.join(self._save_path, f"num_points_{time_step}.txt")  # Use save path variable
+        with open(save_path, "w") as file:
+            file.write(str(num_points))
 
-        # Create a new polydata to store the extracted points
-        extracted_polydata = vtkPolyData()
+        # Save the number of lines to a text file
+        num_lines = input.GetNumberOfLines()
+        save_path = os.path.join(self._save_path, f"num_lines_{time_step}.txt")  # Use save path variable
+        with open(save_path, "w") as file:
+            file.write(str(num_lines))
 
-        # Create a new points array to store the extracted points
-        extracted_points = vtkPoints()
+        # Save the point values of the "Result" array to a text file
+        result_array = input.GetPointData().GetArray("Result")
+        if result_array:
+            num_values = result_array.GetNumberOfTuples()
+            save_path = os.path.join(self._save_path, f"result_values_{time_step}.txt")  # Use save path variable
+            with open(save_path, "w") as file:
+                for i in range(num_values):
+                    value = result_array.GetTuple(i)
+                    file.write(",".join(str(v) for v in value) + "\n")
 
-        # Iterate over all points and extract the ones with the desired id
-        for i in range(input.GetNumberOfPoints()):
-            point_id = point_ids_array.GetValue(i)
-            if point_id == self._typeID:
-                point = input.GetPoint(i)
-                extracted_points.InsertNextPoint(point)
-
-        # Set the extracted points as the points of the new polydata
-        extracted_polydata.SetPoints(extracted_points)
-
-        # Set the output polydata
-        output.ShallowCopy(extracted_polydata)
         print("Done.")
         return 1

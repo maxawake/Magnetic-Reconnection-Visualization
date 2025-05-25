@@ -1,19 +1,16 @@
-__all__ = ["prtlOutlineAxes"]
+from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
 
-from pyprtl.util.vtkAlgorithm import *
 from vtkmodules.vtkCommonDataModel import vtkPolyData, vtkCellArray
-from vtkmodules.util.vtkAlgorithm import VTKPythonAlgorithmBase
 from vtkmodules.numpy_interface import dataset_adapter as dsa
 from vtkmodules.vtkFiltersCore import vtkTubeFilter
 from vtkmodules.vtkCommonCore import vtkPoints
 from vtk import vtkIdList
 
 
-@smproxy.filter(label="PRTL Outline Axes")
-@smhint_menu("prtl")
+@smproxy.filter(label="MRVIS Outline Axes")
 @smproperty.input(name="Input", port_index=0)
 @smdomain.datatype(dataTypes=["vtkDataSet"])
-class prtlOutlineAxes(VTKPythonAlgorithmBase):
+class mrvisOutlineAxes(VTKPythonAlgorithmBase):
     def __init__(self):
         self._array_field = 0
         self._array_name = None

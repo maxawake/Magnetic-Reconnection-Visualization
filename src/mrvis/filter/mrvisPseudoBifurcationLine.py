@@ -1,23 +1,21 @@
-__all__ = ['prtlPseudoBifurcationLine']
+from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
 
-from pyprtl.util.vtkAlgorithm import *
 from vtkmodules.vtkCommonDataModel import vtkImageData, vtkDataSet, vtkDataObject, vtkPolyData
-from vtkmodules.util.vtkAlgorithm import VTKPythonAlgorithmBase
 from vtkmodules.numpy_interface import dataset_adapter as dsa
 from vtkmodules.vtkCommonCore import vtkPoints
 
 
-@smproxy.filter(label="PRTL Pseudo Bifurcation Lines")
-@smhint_menu('prtl')
-@smproperty.input(name='Input', port_index=0)
-@smdomain.datatype(dataTypes=['vtkDataSet']) 
-class prtlPseudoBifurcationLine(VTKPythonAlgorithmBase):
+@smproxy.filter(label="MRVIS Pseudo Bifurcation Lines")
+@smhint_menu("mrvis")
+@smproperty.input(name="Input", port_index=0)
+@smdomain.datatype(dataTypes=["vtkDataSet"])
+class mrvisPseudoBifurcationLine(VTKPythonAlgorithmBase):
     def __init__(self):
         self._array_field = 0
         self._array_name = None
-        VTKPythonAlgorithmBase.__init__(self, nInputPorts=1, nOutputPorts=1, outputType='vtkPolyData')
+        VTKPythonAlgorithmBase.__init__(self, nInputPorts=1, nOutputPorts=1, outputType="vtkPolyData")
 
-    @smproperty_inputarray('Vectors', attribute_type='Vectors')
+    @smproperty_inputarray("Vectors", attribute_type="Vectors")
     def SetInputArrayToProcess(self, idx, port, connection, field, name):
         self._array_field = field
         self._array_name = name
@@ -30,8 +28,7 @@ class prtlPseudoBifurcationLine(VTKPythonAlgorithmBase):
         for i in range(self.GetNumberOfOutputPorts()):
             output = vtkDataSet.GetData(outInfo, i)
             if not output or not output.IsA(inp.GetClassName()):
-                outInfo.GetInformationObject(i).Set(
-                    vtkDataObject.DATA_OBJECT(), inp.NewInstance())
+                outInfo.GetInformationObject(i).Set(vtkDataObject.DATA_OBJECT(), inp.NewInstance())
         return 1
 
     def RequestInformation(self, request, inInfo, outInfo):
@@ -58,7 +55,7 @@ class prtlPseudoBifurcationLine(VTKPythonAlgorithmBase):
         output = dsa.WrapDataObject(vtkPolyData.GetData(outInfo, 0))
 
         # Get the scalar array
-        scalar_array = input.GetPointData().GetArray('FeatureStrength')
+        scalar_array = input.GetPointData().GetArray("FeatureStrength")
 
         # Create a new poly data object
         new_poly_data = vtkPolyData()
@@ -72,7 +69,7 @@ class prtlPseudoBifurcationLine(VTKPythonAlgorithmBase):
             line_points = line.GetPointIds()
 
             # Find the point with the highest scalar value on the line
-            max_scalar_value = -float('inf')
+            max_scalar_value = -float("inf")
             max_scalar_point_id = -1
             for i in range(line_points.GetNumberOfIds()):
                 point_id = line_points.GetId(i)

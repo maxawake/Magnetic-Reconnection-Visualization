@@ -1,38 +1,33 @@
-a__all__ = ['prtlPerpSlice']
+from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
 
 from vtkmodules.vtkFiltersParallel import vtkPMaskPoints
 from vtkmodules.vtkFiltersCore import vtkTubeFilter
 from vtkmodules.vtkFiltersFlowPaths import vtkStreamTracer
 
-from pyprtl.util.vtkAlgorithm import *
-from vtkmodules.vtkCommonDataModel import vtkPlane, vtkPolyData, vtkImageData, vtkCellArray, vtkPolyData, vtkPolyLine
-from vtkmodules.vtkCommonCore import vtkPoints
-from vtkmodules.vtkFiltersCore import vtkCutter
+from vtkmodules.vtkCommonDataModel import vtkPolyData, vtkImageData, vtkPolyData
 from vtkmodules.numpy_interface import dataset_adapter as dsa
-import numpy as np
-from vtk import vtkIdList, vtkDoubleArray
 
-@smproxy.filter(label="PRTL Stream Tube")
-@smhint_menu('prtl')
-@smproperty.input(name='Input2', port_index=1)
-@smdomain.datatype(dataTypes=['vtkDataSet'])
-@smproperty.input(name='Input1', port_index=0)
-@smdomain.datatype(dataTypes=['vtkDataSet']) 
-class prtlStreamTube(VTKPythonAlgorithmBase):
+
+@smproxy.filter(label="MRVIS Stream Tube")
+@smproperty.input(name="Input2", port_index=1)
+@smdomain.datatype(dataTypes=["vtkDataSet"])
+@smproperty.input(name="Input1", port_index=0)
+@smdomain.datatype(dataTypes=["vtkDataSet"])
+class mrvisStreamTube(VTKPythonAlgorithmBase):
     def __init__(self):
-        VTKPythonAlgorithmBase.__init__(self, nInputPorts=2, nOutputPorts=1, outputType='vtkPolyData')
+        VTKPythonAlgorithmBase.__init__(self, nInputPorts=2, nOutputPorts=1, outputType="vtkPolyData")
         self._array_field = [0] * 2
         self._array_name = [None] * 2
         self._line_segment = 0.0
         self._cell_id = 0
-    
-    @smproperty_inputarray('Data', idx=0, input_name='Input1', attribute_type='Vectors')
+
+    @smproperty_inputarray("Data", idx=0, input_name="Input1", attribute_type="Vectors")
     def SetInputArrayToProcessA(self, idx, port, connection, field, name):
         self._array_field[0] = field
         self._array_name[0] = name
         self.Modified()
 
-    @smproperty_inputarray('Line', idx=1, input_name='Input2', attribute_type='PolyData')
+    @smproperty_inputarray("Line", idx=1, input_name="Input2", attribute_type="PolyData")
     def SetInputArrayToProcessB(self, idx, port, connection, field, name):
         self._array_field[1] = field
         self._array_name[1] = name
@@ -51,8 +46,8 @@ class prtlStreamTube(VTKPythonAlgorithmBase):
         Tube1.SetNumberOfSides(64)
         Tube1.SetRadius(0.3)
         Tube1.SetRadiusFactor(10.0)
-        Tube1.SetInputArrayToProcess(0, 0, 0, 0, '')
-        Tube1.SetInputArrayToProcess(1, 0, 0, 0, 'Normals')
+        Tube1.SetInputArrayToProcess(0, 0, 0, 0, "")
+        Tube1.SetInputArrayToProcess(1, 0, 0, 0, "Normals")
         Tube1.SetUseDefaultNormal(False)
         Tube1.SetVaryRadius(0)
         Tube1.Update()
@@ -84,7 +79,7 @@ class prtlStreamTube(VTKPythonAlgorithmBase):
         StreamTracerWithCustomSource1.SetMaximumNumberOfSteps(2000)
         StreamTracerWithCustomSource1.SetMaximumPropagation(15.75)
         StreamTracerWithCustomSource1.SetMinimumIntegrationStep(0.01)
-        StreamTracerWithCustomSource1.SetInputArrayToProcess(0, 0, 0, 0, 'vectors-B')
+        StreamTracerWithCustomSource1.SetInputArrayToProcess(0, 0, 0, 0, "vectors-B")
         StreamTracerWithCustomSource1.SetSourceConnection(MaskPoints1.GetOutputPort(0))
         StreamTracerWithCustomSource1.SetSurfaceStreamlines(False)
         StreamTracerWithCustomSource1.SetTerminalSpeed(1e-12)
@@ -99,8 +94,8 @@ class prtlStreamTube(VTKPythonAlgorithmBase):
         Tube2.SetNumberOfSides(6)
         Tube2.SetRadius(0.09451468769973144)
         Tube2.SetRadiusFactor(10.0)
-        Tube2.SetInputArrayToProcess(0, 0, 0, 0, 'scalars-rhoI')
-        Tube2.SetInputArrayToProcess(1, 0, 0, 0, 'Normals')
+        Tube2.SetInputArrayToProcess(0, 0, 0, 0, "scalars-rhoI")
+        Tube2.SetInputArrayToProcess(1, 0, 0, 0, "Normals")
         Tube2.SetUseDefaultNormal(False)
         Tube2.SetVaryRadius(0)
         Tube2.Update()

@@ -1,19 +1,15 @@
-__all__ = ["prtlCoordinateAxes"]
-
-from pyprtl.util.vtkAlgorithm import *
 from vtkmodules.vtkCommonCore import vtkPoints
 from vtkmodules.vtkCommonDataModel import vtkImageData, vtkPolyLine, vtkPolyData, vtkCellArray
-from vtkmodules.util.vtkAlgorithm import VTKPythonAlgorithmBase
+from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smproxy, smproperty, smdomain
 from vtkmodules.numpy_interface import dataset_adapter as dsa
 from vtkmodules.vtkFiltersCore import vtkTubeFilter, vtkAppendPolyData
 from vtkmodules.vtkFiltersSources import vtkConeSource
 
 
-@smproxy.filter(label="PRTL Coordinate Axes")
-@smhint_menu("prtl")
+@smproxy.filter(label="MRVIS Coordinate Axes")
 @smproperty.input(name="Input", port_index=0)
 @smdomain.datatype(dataTypes=["vtkDataSet"])
-class prtlCoordinateAxes(VTKPythonAlgorithmBase):
+class mrvisCoordinateAxes(VTKPythonAlgorithmBase):
     def __init__(self):
         self._array_field = 0
         self._array_name = None

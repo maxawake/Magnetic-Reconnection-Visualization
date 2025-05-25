@@ -1,24 +1,23 @@
-a__all__ = ['prtlParallelVectorsPython']
-from pyprtl.util.vtkAlgorithm import *
+from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
+
 from vtkmodules.vtkCommonDataModel import vtkImageData, vtkDataSet, vtkDataObject
-from vtkmodules.util.vtkAlgorithm import VTKPythonAlgorithmBase
 from vtkmodules.numpy_interface import dataset_adapter as dsa
-import math
 import numpy as np
 
 
 def get_parallel_vector_operator(vec1, vec2):
-    #nx, ny, nz = vec1.shape[0], vec1.shape[1], vec1.shape[2]
-    #sizex, sizey, sizez = vec1.shape[1], vec1.shape[2], vec1.shape[3]
+    # nx, ny, nz = vec1.shape[0], vec1.shape[1], vec1.shape[2]
+    # sizex, sizey, sizez = vec1.shape[1], vec1.shape[2], vec1.shape[3]
 
     cross_product = np.cross(vec1.reshape(-1, vec1.shape[-1]), vec2.reshape(-1, vec1.shape[-1]))
-    #parallel = np.linalg.norm(cross_product, axis=1).reshape(sizex, sizey, sizez)
+    # parallel = np.linalg.norm(cross_product, axis=1).reshape(sizex, sizey, sizez)
 
     return cross_product.reshape(*vec1.shape)
 
+
 def get_angle(vec1, vec2, idx):
     nx, ny, nz = vec1.shape[0], vec1.shape[1], vec1.shape[2]
-    #sizex, sizey, sizez = vec1.shape[1], vec1.shape[2], vec1.shape[3]
+    # sizex, sizey, sizez = vec1.shape[1], vec1.shape[2], vec1.shape[3]
 
     """cross_product = np.cross(vec1.reshape(-1, vec1.shape[-1]), vec2.reshape(-1, vec1.shape[-1]))
     #parallel = np.linalg.norm(cross_product, axis=1).reshape(sizex, sizey, sizez)
@@ -33,29 +32,30 @@ def get_angle(vec1, vec2, idx):
     mag_vec1 = np.linalg.norm(vec1)
     mag_vec2 = np.linalg.norm(vec2)
 
-    return np.arcsin(crossp[:,idx].reshape(nx, ny , nz)/(mag_vec1*mag_vec2))#.reshape(nx, ny , nz)
+    return np.arcsin(crossp[:, idx].reshape(nx, ny, nz) / (mag_vec1 * mag_vec2))  # .reshape(nx, ny , nz)
 
 
-@smproxy.filter(label="PRTL Parallel Vectors Python")
-@smhint_menu('prtl')
-@smproperty.input(name='Input', port_index=0)
-@smdomain.datatype(dataTypes=['vtkDataSet']) 
-class prtlParallelVectorsPython(VTKPythonAlgorithmBase):
+@smproxy.filter(label="MRVIS Parallel Vectors Python")
+@smproperty.input(name="Input", port_index=0)
+@smdomain.datatype(dataTypes=["vtkDataSet"])
+class mrvisParallelVectorsPython(VTKPythonAlgorithmBase):
     def __init__(self):
         self._array_field = [0] * 2
-        self._array_name = ['None'] * 2
-        VTKPythonAlgorithmBase.__init__(self, nInputPorts=1, nOutputPorts=3, outputType='vtkImageData')
-    
+        self._array_name = ["None"] * 2
+        VTKPythonAlgorithmBase.__init__(self, nInputPorts=1, nOutputPorts=3, outputType="vtkImageData")
+
     def SetInputArrayToProcess(self, idx, port, connection, field, name):
         self._array_field[idx] = field
         self._array_name[idx] = name
         self.Modified()
 
-    @smproperty_inputarray('u', none_string='None', idx=0, command='SetInputArrayToProcess')
-    def SetInputArrayToProcess1(): pass
+    @smproperty_inputarray("u", none_string="None", idx=0, command="SetInputArrayToProcess")
+    def SetInputArrayToProcess1():
+        pass
 
-    @smproperty_inputarray('w', none_string='None', idx=1, command='SetInputArrayToProcess')
-    def SetInputArrayToProcess2(): pass
+    @smproperty_inputarray("w", none_string="None", idx=1, command="SetInputArrayToProcess")
+    def SetInputArrayToProcess2():
+        pass
 
     def RequestDataObject(self, request, inInfo, outInfo):
         inp = vtkDataSet.GetData(inInfo[0], 0)
@@ -64,8 +64,7 @@ class prtlParallelVectorsPython(VTKPythonAlgorithmBase):
         for i in range(self.GetNumberOfOutputPorts()):
             output = vtkDataSet.GetData(outInfo, i)
             if not output or not output.IsA(inp.GetClassName()):
-                outInfo.GetInformationObject(i).Set(
-                    vtkDataObject.DATA_OBJECT(), inp.NewInstance())
+                outInfo.GetInformationObject(i).Set(vtkDataObject.DATA_OBJECT(), inp.NewInstance())
         return 1
 
     def RequestInformation(self, request, inInfo, outInfo):
@@ -76,7 +75,7 @@ class prtlParallelVectorsPython(VTKPythonAlgorithmBase):
 
         extent = list(in_info.Get(executive.WHOLE_EXTENT()))
         dims = [extent[2 * i + 1] - extent[2 * i] + 1 for i in range(len(extent) // 2)]
-        
+
         out_info = outInfo.GetInformationObject(0)
         out_info.Set(executive.WHOLE_EXTENT(), extent, 6)
         return 1
@@ -100,29 +99,29 @@ class prtlParallelVectorsPython(VTKPythonAlgorithmBase):
         dimensions = list(input.VTKObject.GetDimensions())
         spacing = list(input.VTKObject.GetSpacing())
 
-        array0= input.PointData[self._array_name[0]]
+        array0 = input.PointData[self._array_name[0]]
         array1 = input.PointData[self._array_name[1]]
-        
+
         components = 1 if len(array0.shape) == 1 else array0.shape[1]
-        data0 = np.copy(array0.reshape(dimensions + [components], order='F'))
+        data0 = np.copy(array0.reshape(dimensions + [components], order="F"))
 
         components = 1 if len(array1.shape) == 1 else array1.shape[1]
-        data1 = np.copy(array1.reshape(dimensions + [components], order='F'))
+        data1 = np.copy(array1.reshape(dimensions + [components], order="F"))
 
         # result = get_parallel_vector_operator(data0, data1)
         # result = result.reshape((-1, result.shape[-1]), order='F')
         # output.PointData.append(result, "Parallel Vectors")
 
         result = get_angle(data0, data1, 0)
-        result = result.reshape(-1, order='F')
+        result = result.reshape(-1, order="F")
         output.PointData.append(result, "Angles")
 
         result1 = get_angle(data0, data1, 1)
-        result1 = result1.reshape(-1, order='F')
+        result1 = result1.reshape(-1, order="F")
         output1.PointData.append(result1, "Angles1")
 
         result2 = get_angle(data0, data1, 2)
-        result2 = result2.reshape(-1, order='F')
+        result2 = result2.reshape(-1, order="F")
         output2.PointData.append(result2, "Angles2")
 
         return 1

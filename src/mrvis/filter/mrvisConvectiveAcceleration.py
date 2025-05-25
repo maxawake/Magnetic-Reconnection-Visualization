@@ -1,23 +1,38 @@
-__all__ = ['prtlShearLayer']
+from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
 
-from pyprtl.util.vtkAlgorithm import *
 from vtkmodules.vtkCommonDataModel import vtkImageData, vtkDataSet, vtkDataObject
-from vtkmodules.util.vtkAlgorithm import VTKPythonAlgorithmBase
 from vtkmodules.numpy_interface import dataset_adapter as dsa
-import math
-import numpy as np
 
-@smproxy.filter(label="PRTL Shear Layer")
-@smhint_menu('prtl')
-@smproperty.input(name='Input', port_index=0)
-@smdomain.datatype(dataTypes=['vtkDataSet']) 
-class prtlShearLayer(VTKPythonAlgorithmBase):
+import numpy as np
+from scipy import ndimage
+from findiff import Gradient
+
+
+def get_gradient(scalar, linx, liny, linz):
+    dx = ndimage.sobel(scalar, 0)  # x derivative
+    dy = ndimage.sobel(scalar, 1)  # y derivative
+    dz = ndimage.sobel(scalar, 2)  # z derivative
+    return dx, dy, dz
+
+
+def get_jacobian(vec, linx, liny, linz):
+    grad = Gradient(h=[linx, liny, linz], acc=6)
+    dudx, dudy, dudz = grad(vec[..., 0])
+    dvdx, dvdy, dvdz = grad(vec[..., 1])
+    dwdx, dwdy, dwdz = grad(vec[..., 2])
+    return np.array([[dudx, dudy, dudz], [dvdx, dvdy, dvdz], [dwdx, dwdy, dwdz]])
+
+
+@smproxy.filter(label="MRVIS Convective Acceleration")
+@smproperty.input(name="Input", port_index=0)
+@smdomain.datatype(dataTypes=["vtkDataSet"])
+class mrvisConvectiveAcceleration(VTKPythonAlgorithmBase):
     def __init__(self):
         self._array_field = 0
         self._array_name = None
-        VTKPythonAlgorithmBase.__init__(self, nInputPorts=1, nOutputPorts=1, outputType='vtkImageData')
+        VTKPythonAlgorithmBase.__init__(self, nInputPorts=1, nOutputPorts=1, outputType="vtkImageData")
 
-    @smproperty_inputarray('Vectors', attribute_type='Vectors')
+    @smproperty_inputarray("Vectors", attribute_type="Vectors")
     def SetInputArrayToProcess(self, idx, port, connection, field, name):
         self._array_field = field
         self._array_name = name
@@ -30,8 +45,7 @@ class prtlShearLayer(VTKPythonAlgorithmBase):
         for i in range(self.GetNumberOfOutputPorts()):
             output = vtkDataSet.GetData(outInfo, i)
             if not output or not output.IsA(inp.GetClassName()):
-                outInfo.GetInformationObject(i).Set(
-                    vtkDataObject.DATA_OBJECT(), inp.NewInstance())
+                outInfo.GetInformationObject(i).Set(vtkDataObject.DATA_OBJECT(), inp.NewInstance())
         return 1
 
     def RequestInformation(self, request, inInfo, outInfo):
@@ -42,7 +56,7 @@ class prtlShearLayer(VTKPythonAlgorithmBase):
 
         extent = list(in_info.Get(executive.WHOLE_EXTENT()))
         dims = [extent[2 * i + 1] - extent[2 * i] + 1 for i in range(len(extent) // 2)]
-        
+
         out_info = outInfo.GetInformationObject(0)
         out_info.Set(executive.WHOLE_EXTENT(), extent, 6)
         return 1
@@ -63,40 +77,28 @@ class prtlShearLayer(VTKPythonAlgorithmBase):
         spacing = list(input.VTKObject.GetSpacing())
 
         array = input.PointData[self._array_name]
-        
-        components = 1 if len(array.shape) == 1 else array.shape[1]
-        data = np.copy(array.reshape(dimensions + [components], order='F'))
 
-        dudx, dudy, dudz = np.gradient(data[...,0], spacing[0], spacing[1], spacing[2])
+        components = 1 if len(array.shape) == 1 else array.shape[1]
+        data = np.copy(array.reshape(dimensions + [components], order="F"))
+
+        # First version
+        """dudx, dudy, dudz = np.gradient(data[...,0], spacing[0], spacing[1], spacing[2])
         dvdx, dvdy, dvdz = np.gradient(data[...,1], spacing[0], spacing[1], spacing[2])
         dwdx, dwdy, dwdz = np.gradient(data[...,2], spacing[0], spacing[1], spacing[2])
 
+        
+
         Jacobian = np.array([[dudx, dudy, dudz],
                              [dvdx, dvdy, dvdz],
-                             [dwdx, dwdy, dwdz]])
-        
-        Jac = Jacobian.reshape(Jacobian.shape[0], Jacobian.shape[1], -1).transpose(2, 0, 1)
+                             [dwdx, dwdy, dwdz]])"""
 
-        S = (Jac + Jac.transpose(0,2,1)) / 2
-        eigenvals = np.linalg.eigvals(S)
-        result = -(eigenvals[:,0]*eigenvals[:,1] + eigenvals[:,0]*eigenvals[:,2] + eigenvals[:,1]*eigenvals[:,2])
-        # result = np.sqrt(
-        #     (
-        #         (eigenvals[:,0] - eigenvals[:,1]) ** 2
-        #         + (eigenvals[:,0] - eigenvals[:,2]) ** 2
-        #         + (eigenvals[:,1] - eigenvals[:,2]) ** 2
-        #     )
-        #     / 6
-        # )
-        
-        result_reshaped = result.reshape(data.shape[0], data.shape[1], data.shape[2])
+        # Get jacobian with higher order derivative
+        Jacobian = get_jacobian(data, spacing[0], spacing[1], spacing[2])
 
-        result = result_reshaped.reshape(-1, order='F')
-        output.PointData.append(result, "Shear Layer")
+        dirDiv = Jacobian.transpose(2, 3, 4, 1, 0).reshape(-1, 3, 3) @ data.reshape(-1, 3)[..., np.newaxis]
+        dirDiv = dirDiv.reshape(*data.shape)
+
+        dirDiv = dirDiv.reshape((-1, dirDiv.shape[-1]), order="F")
+        output.PointData.append(dirDiv, "Directional Derivative")
 
         return 1
-
-
-
-
-

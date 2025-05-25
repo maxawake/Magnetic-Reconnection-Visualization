@@ -1,6 +1,7 @@
-import tqdm
 import numpy as np
+import tqdm
 from findiff import Gradient
+
 
 def curl(dx, dy, dz, u, v, w):
     dFx_dx, dFx_dy, dFx_dz = np.gradient(u, dx, dy, dz)
@@ -15,11 +16,11 @@ def curl(dx, dy, dz, u, v, w):
 
 
 def jacobian(vec, dx, dy, dz, order=2):
-    if order==1:
+    if order == 1:
         dudx, dudy, dudz = np.gradient(vec[0], dx, dy, dz)
         dvdx, dvdy, dvdz = np.gradient(vec[1], dx, dy, dz)
         dwdx, dwdy, dwdz = np.gradient(vec[2], dx, dy, dz)
-    elif order==2:
+    elif order == 2:
         ddx = dx[1] - dx[0]
         ddy = dy[1] - dy[0]
         ddz = dz[1] - dz[0]

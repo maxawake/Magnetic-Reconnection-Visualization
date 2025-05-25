@@ -1,10 +1,19 @@
-from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
+import os
+import sys
 
-from vtkmodules.vtkCommonDataModel import vtkPolyData, vtkCellArray
-from vtkmodules.numpy_interface import dataset_adapter as dsa
-from vtkmodules.vtkFiltersCore import vtkTubeFilter
-from vtkmodules.vtkCommonCore import vtkPoints
+from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
 from vtk import vtkIdList
+from vtkmodules.numpy_interface import dataset_adapter as dsa
+from vtkmodules.vtkCommonCore import vtkPoints
+from vtkmodules.vtkCommonDataModel import vtkCellArray, vtkPolyData
+from vtkmodules.vtkFiltersCore import vtkTubeFilter
+
+plugin_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+src_path = os.path.join(plugin_root, "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+
+from mrvis.filter.decorators import smproperty_inputarray
 
 
 @smproxy.filter(label="MRVIS Outline Axes")
@@ -18,7 +27,7 @@ class mrvisOutlineAxes(VTKPythonAlgorithmBase):
         self._resolution = 6
         VTKPythonAlgorithmBase.__init__(self, nInputPorts=1, nOutputPorts=3, outputType="vtkPolyData")
 
-    @smproperty_inputarray("Vectors", attribute_type="Vectors")
+    # @smproperty_inputarray("Vectors", attribute_type="Vectors")
     def SetInputArrayToProcess(self, idx, port, connection, field, name):
         self._array_field = field
         self._array_name = name

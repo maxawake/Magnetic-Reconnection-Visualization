@@ -1,9 +1,3 @@
-import sys
-
-sys.path.insert(0, "/home/max/Github/Magnetic-Reconnection-Visualization/src")
-
-from pathlib import Path
-
 import cmasher
 import h5py
 import matplotlib.pyplot as plt
@@ -166,7 +160,7 @@ def load_plasma(
         if vtk:
             # Save the current time step as vti with pyvista
             grid = pv.ImageData(dimensions=resolution, origin=(0, 0, 0), spacing=(1, 1, 1))
-            
+
             # Add all fields to the grid
             for idx in range(len(field_numpy)):
                 vector, fname, scalar, sname = field_numpy[idx]
@@ -175,7 +169,7 @@ def load_plasma(
                 grid.point_data.set_vectors(vecs_flat, fname)
                 if scalar is not None:
                     grid.point_data.set_scalars(scalar.flatten(order="F"), sname)
-                    
+
             # Write the VTK file
             date = print_time()
             grid.save(savepath + f"{date}-{name}.{str(i).zfill(4)}.vti")

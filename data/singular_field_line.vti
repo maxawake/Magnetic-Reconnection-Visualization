@@ -2,9 +2,9 @@
 <VTKFile type="ImageData" version="0.1" byte_order="LittleEndian" header_type="UInt32" compressor="vtkZLibDataCompressor">
   <ImageData WholeExtent="0 63 0 63 0 63" Origin="-3 -1 -3" Spacing="0.09523809523809534 0.0793650793650793 0.09523809523809534" Direction="1 0 0 0 1 0 0 0 1">
     <Piece Extent="0 63 0 63 0 63"                                                    >
-      <PointData Vectors="MyVectorField">
-        <DataArray type="Float32" Name="MyVectorField" NumberOfComponents="3" format="appended" RangeMin="0.11075936781"        RangeMax="17.262966141"         offset="0"                   />
-        <DataArray type="Float32" Name="ConvectiveAcceleration" NumberOfComponents="3" format="appended" RangeMin="0.0040566723314"      RangeMax="25.19841293"          offset="966516"              />
+      <PointData Vectors="Vectors">
+        <DataArray type="Float32" Name="Vectors" NumberOfComponents="3" format="appended" RangeMin="0.11075936781"        RangeMax="17.262966141"         offset="0"                   />
+        <DataArray type="Float32" Name="Convective Acceleration" NumberOfComponents="3" format="appended" RangeMin="0.0040566723314"      RangeMax="25.19841293"          offset="966516"              />
       </PointData>
       <CellData>
       </CellData>

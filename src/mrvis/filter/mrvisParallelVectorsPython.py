@@ -1,8 +1,17 @@
-from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
+import os
+import sys
 
-from vtkmodules.vtkCommonDataModel import vtkImageData, vtkDataSet, vtkDataObject
-from vtkmodules.numpy_interface import dataset_adapter as dsa
 import numpy as np
+from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
+from vtkmodules.numpy_interface import dataset_adapter as dsa
+from vtkmodules.vtkCommonDataModel import vtkDataObject, vtkDataSet, vtkImageData
+
+plugin_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+src_path = os.path.join(plugin_root, "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+
+from mrvis.filter.decorators import smproperty_inputarray
 
 
 def get_parallel_vector_operator(vec1, vec2):
@@ -49,11 +58,11 @@ class mrvisParallelVectorsPython(VTKPythonAlgorithmBase):
         self._array_name[idx] = name
         self.Modified()
 
-    @smproperty_inputarray("u", none_string="None", idx=0, command="SetInputArrayToProcess")
+    # @smproperty_inputarray("u", none_string="None", idx=0, command="SetInputArrayToProcess")
     def SetInputArrayToProcess1():
         pass
 
-    @smproperty_inputarray("w", none_string="None", idx=1, command="SetInputArrayToProcess")
+    # @smproperty_inputarray("w", none_string="None", idx=1, command="SetInputArrayToProcess")
     def SetInputArrayToProcess2():
         pass
 

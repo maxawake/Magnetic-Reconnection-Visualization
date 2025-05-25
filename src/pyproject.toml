@@ -5,12 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "findiff>=0.12.1",
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.3",
     "mpi4py>=4.0.3",
     "numpy>=2.2.6",
     "scipy>=1.15.3",
-    "tqdm>=4.67.1",
     "vtk>=9.4.2",
 ]

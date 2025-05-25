@@ -1,9 +1,17 @@
-from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
-
-from vtkmodules.vtkCommonDataModel import vtkImageData, vtkDataSet, vtkDataObject, vtkPolyData
-from vtkmodules.numpy_interface import dataset_adapter as dsa
 import os
+import sys
+
 import paraview.simple as pv
+from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
+from vtkmodules.numpy_interface import dataset_adapter as dsa
+from vtkmodules.vtkCommonDataModel import vtkDataObject, vtkDataSet, vtkImageData, vtkPolyData
+
+plugin_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+src_path = os.path.join(plugin_root, "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+
+from mrvis.filter.decorators import smproperty_inputarray
 
 
 @smproxy.filter(label="MRVIS Save Stuff")

@@ -1,5 +1,0 @@
-NAME  ParallelVectors
-DESCRIPTION  Parallel-vectors line extractor
-REQUIRES_MODULES  VTK::CommonCore
-SERVER_MANAGER_XML  Plugin.xml
-SERVER_MANAGER_SOURCES  vtkParallelVectors.cxx

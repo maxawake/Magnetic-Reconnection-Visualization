@@ -1,11 +1,20 @@
-from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
+import os
+import sys
 
-from vtkmodules.vtkCommonDataModel import vtkPlane, vtkPolyData, vtkImageData, vtkCellArray, vtkPolyData, vtkPolyLine
-from vtkmodules.vtkCommonCore import vtkPoints
-from vtkmodules.vtkFiltersCore import vtkCutter
-from vtkmodules.numpy_interface import dataset_adapter as dsa
 import numpy as np
-from vtk import vtkIdList, vtkDoubleArray
+from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
+from vtk import vtkDoubleArray, vtkIdList
+from vtkmodules.numpy_interface import dataset_adapter as dsa
+from vtkmodules.vtkCommonCore import vtkPoints
+from vtkmodules.vtkCommonDataModel import vtkCellArray, vtkImageData, vtkPlane, vtkPolyData, vtkPolyLine
+from vtkmodules.vtkFiltersCore import vtkCutter
+
+plugin_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+src_path = os.path.join(plugin_root, "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+
+from mrvis.filter.decorators import smproperty_inputarray
 
 
 @smproxy.filter(label="MRVIS Perpendicular Slice")

@@ -1,8 +1,17 @@
-from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
+import os
+import sys
 
-from vtkmodules.vtkCommonDataModel import vtkPolyData, vtkImageData, vtkPolyData
+from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
 from vtkmodules.numpy_interface import dataset_adapter as dsa
+from vtkmodules.vtkCommonDataModel import vtkImageData, vtkPolyData
 from vtkmodules.vtkFiltersFlowPaths import vtkParallelVectors
+
+plugin_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+src_path = os.path.join(plugin_root, "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+
+from mrvis.filter.decorators import smproperty_inputarray
 
 
 @smproxy.filter(label="MRVIS Parallel Vectors VTK")

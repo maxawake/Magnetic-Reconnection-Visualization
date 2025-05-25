@@ -1,5 +1,4 @@
 import numpy as np
-import tqdm
 from findiff import Gradient
 
 

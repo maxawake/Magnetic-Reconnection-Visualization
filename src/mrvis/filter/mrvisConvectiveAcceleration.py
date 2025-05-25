@@ -1,11 +1,20 @@
-from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
-
-from vtkmodules.vtkCommonDataModel import vtkImageData, vtkDataSet, vtkDataObject
-from vtkmodules.numpy_interface import dataset_adapter as dsa
+import os
+import sys
 
 import numpy as np
+
+# from findiff import Gradient
+from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
 from scipy import ndimage
-from findiff import Gradient
+from vtkmodules.numpy_interface import dataset_adapter as dsa
+from vtkmodules.vtkCommonDataModel import vtkDataObject, vtkDataSet, vtkImageData
+
+plugin_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+src_path = os.path.join(plugin_root, "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+
+from mrvis.filter.decorators import smproperty_inputarray
 
 
 def get_gradient(scalar, linx, liny, linz):
@@ -16,7 +25,7 @@ def get_gradient(scalar, linx, liny, linz):
 
 
 def get_jacobian(vec, linx, liny, linz):
-    grad = Gradient(h=[linx, liny, linz], acc=6)
+    grad = None  # Gradient(h=[linx, liny, linz], acc=6)
     dudx, dudy, dudz = grad(vec[..., 0])
     dvdx, dvdy, dvdz = grad(vec[..., 1])
     dwdx, dwdy, dwdz = grad(vec[..., 2])

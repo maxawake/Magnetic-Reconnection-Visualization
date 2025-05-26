@@ -15,7 +15,7 @@ if src_path not in sys.path:
 from mrvis.filter.decorators import smproperty_inputarray
 
 
-@smproxy.filter(label="MRVIS Jacobian Eigen System")
+@smproxy.filter(label="MRVIS Eigendecomposition")
 @smproperty.input(name="Input", port_index=0)
 @smdomain.datatype(dataTypes=["vtkDataSet"])
 class mrvisJacobianEigenSystem(VTKPythonAlgorithmBase):
@@ -53,7 +53,7 @@ class mrvisJacobianEigenSystem(VTKPythonAlgorithmBase):
         for i in range(n_points):
             J = np.array(data[i]).reshape((3, 3))
             eigvals, eigvecs = np.linalg.eig(J)
-            eigenvalues[i, :] = eigvals.real
+            eigenvalues[i, :] = np.sort(eigvals.real)
             eigenvectors[i, :] = eigvecs.real.T.flatten()  # column-major order
 
         # Create VTK arrays and assign to output

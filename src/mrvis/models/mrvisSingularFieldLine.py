@@ -18,6 +18,6 @@ class mrvisModel3DBifurcation(mrvisModelBase):
     def Sample(self, x, y, z):
         dx = (y - 2) ** 2 - self._epsilon + z**2  # + np.abs(x)
         dy = -x  # + 0.1*y
-        dz = 1 * x / x
+        dz = 0.1 * x / x
 
         return np.stack([dx, dy, dz], axis=-1)

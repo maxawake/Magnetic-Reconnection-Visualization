@@ -15,7 +15,6 @@ from mrvis.filter.decorators import smproperty_inputarray
 
 
 @smproxy.filter(label="MRVIS Pseudo Bifurcation Lines")
-@smhint_menu("mrvis")
 @smproperty.input(name="Input", port_index=0)
 @smdomain.datatype(dataTypes=["vtkDataSet"])
 class mrvisPseudoBifurcationLine(VTKPythonAlgorithmBase):

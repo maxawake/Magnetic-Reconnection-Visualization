@@ -3,7 +3,7 @@ import sys
 
 from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
 from vtkmodules.numpy_interface import dataset_adapter as dsa
-from vtkmodules.vtkCommonDataModel import vtkImageData, vtkPolyData
+from vtkmodules.vtkCommonDataModel import vtkImageData, vtkPolyData, vtkUnstructuredGrid
 from vtkmodules.vtkFiltersFlowPaths import vtkParallelVectors
 
 plugin_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -40,7 +40,7 @@ class mrvisParallelVectorsVTK(VTKPythonAlgorithmBase):
         pass
 
     def RequestData(self, request, inInfo, outInfo):
-        input = dsa.WrapDataObject(vtkImageData.GetData(inInfo[0], 0))
+        input = dsa.WrapDataObject(vtkUnstructuredGrid.GetData(inInfo[0], 0))
         output = dsa.WrapDataObject(vtkPolyData.GetData(outInfo, 0))
 
         pv = vtkParallelVectors()

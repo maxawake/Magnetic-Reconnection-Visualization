@@ -14,6 +14,7 @@ plugin_list = [
     "mrvisParallelVectorsPython.py",
     "mrvisPseudoBifurcationLine.py",
     "mrvisStreamTube.py",
+    "mrvisEigenvalues.py",
 ]
 
 plugin_dir = os.path.dirname(__file__)

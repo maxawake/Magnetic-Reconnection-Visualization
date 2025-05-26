@@ -1,5 +1,7 @@
 # Magnetic-Reconnection-Visualization
-
+<p align="center">
+<img src="solar-flux-rope.png" width="300">
+</p>
 This repositories hosts the code used in [paper link] about the "Local Extraction of Magnetic Reconnection in Three-Dimensional Plasma Simulations". The core of this code is the python package `mrvis` located in `src/mrvis`. It contains the implementations of the Paraview filter plugins and magnetic reconnection models, as well as some helper functions. 
 
 The tools provided here can be used to localize singular field line magnetic reconnection in 3D plasma simulations requiring only the magnetic field data. The regions can be found as topological features of the vector field using (pseudo-) bifurcation lines.  

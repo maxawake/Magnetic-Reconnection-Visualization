@@ -21,6 +21,6 @@ model_list = ["mrvis3DMagneticReconnection.py", "mrvisCriticalPoint.py", "mrvisS
 
 plugin_dir = os.path.dirname(__file__)
 for name in plugin_list:
-    LoadPlugin(os.path.join(plugin_dir, "filter", name), remote=True)
+    LoadPlugin(os.path.join(plugin_dir, "plugins", name), remote=True)
 for name in model_list:
     LoadPlugin(os.path.join(plugin_dir, "models", name), remote=True)

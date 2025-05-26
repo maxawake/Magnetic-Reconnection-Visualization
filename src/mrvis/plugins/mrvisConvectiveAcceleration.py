@@ -13,7 +13,7 @@ src_path = os.path.join(plugin_root, "src")
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
-from mrvis.filter.decorators import smproperty_inputarray
+from mrvis.plugins.decorators import smproperty_inputarray
 
 
 def get_gradient(scalar, linx, liny, linz):

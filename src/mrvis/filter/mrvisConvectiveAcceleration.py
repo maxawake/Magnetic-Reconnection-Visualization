@@ -3,7 +3,6 @@ import sys
 
 import numpy as np
 
-# from findiff import Gradient
 from paraview.util.vtkAlgorithm import VTKPythonAlgorithmBase, smdomain, smproperty, smproxy
 from scipy import ndimage
 from vtkmodules.numpy_interface import dataset_adapter as dsa
@@ -25,10 +24,9 @@ def get_gradient(scalar, linx, liny, linz):
 
 
 def get_jacobian(vec, linx, liny, linz):
-    grad = None  # Gradient(h=[linx, liny, linz], acc=6)
-    dudx, dudy, dudz = grad(vec[..., 0])
-    dvdx, dvdy, dvdz = grad(vec[..., 1])
-    dwdx, dwdy, dwdz = grad(vec[..., 2])
+    dudx, dudy, dudz = np.gradient(vec[..., 0], linx, liny, linz)
+    dvdx, dvdy, dvdz = np.gradient(vec[..., 1], linx, liny, linz)
+    dwdx, dwdy, dwdz = np.gradient(vec[..., 2], linx, liny, linz)
     return np.array([[dudx, dudy, dudz], [dvdx, dvdy, dvdz], [dwdx, dwdy, dwdz]])
 
 
@@ -108,6 +106,6 @@ class mrvisConvectiveAcceleration(VTKPythonAlgorithmBase):
         dirDiv = dirDiv.reshape(*data.shape)
 
         dirDiv = dirDiv.reshape((-1, dirDiv.shape[-1]), order="F")
-        output.PointData.append(dirDiv, "Directional Derivative")
+        output.PointData.append(dirDiv, "Convective Acceleration")
 
         return 1

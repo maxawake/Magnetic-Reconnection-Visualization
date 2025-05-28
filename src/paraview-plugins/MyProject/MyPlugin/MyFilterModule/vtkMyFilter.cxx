@@ -1,15 +1,15 @@
-#include "MyAlgorithm.h"
+#include "vtkMyFilter.h"
 #include <vtkObjectFactory.h>
 #include <vtkPolyData.h>
 
-vtkStandardNewMacro(MyAlgorithm);
+vtkStandardNewMacro(vtkMyFilter);
 
-MyAlgorithm::MyAlgorithm() {
+vtkMyFilter::vtkMyFilter() {
   this->SetNumberOfInputPorts(1);
   this->SetNumberOfOutputPorts(1);
 }
 
-int MyAlgorithm::RequestData(vtkInformation* request,
+int vtkMyFilter::RequestData(vtkInformation* request,
                              vtkInformationVector** inputVector,
                              vtkInformationVector* outputVector) {
   vtkPolyData* input = vtkPolyData::GetData(inputVector[0], 0);

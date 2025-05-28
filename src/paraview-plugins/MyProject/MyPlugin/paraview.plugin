@@ -1,0 +1,7 @@
+NAME
+  MyFilter
+DESCRIPTION
+  A simple filter plugin for ParaView.
+REQUIRES_MODULES
+  VTK::CommonCore
+  VTK::FiltersCore

@@ -1,46 +1,38 @@
-cmake_minimum_required(VERSION 3.18)
-project(MyProject)
+cmake_minimum_required(VERSION 3.8)
+project(MyFilter)
+
+find_package(ParaView REQUIRED)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
-find_package(VTK REQUIRED)
-include(GNUInstallDirs)
+# enable_testing()
 
+# Required for python testing
+# set(_vtk_build_TEST_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Testing/Temporary)
+
+include(GNUInstallDirs)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
-set(VTK_WRAP_PYTHON ON)
 
-# Explicit install locations
-set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "Install path")
-set(CMAKE_INSTALL_INCLUDEDIR "include")
-set(CMAKE_INSTALL_LIBDIR "lib")
-set(CMAKE_INSTALL_BINDIR "bin")
-set(CMAKE_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake")
+set("_paraview_plugin_default_${PROJECT_NAME}" ON)
+paraview_plugin_scan(
+  PLUGIN_FILES      "${CMAKE_CURRENT_SOURCE_DIR}/MyPlugin/paraview.plugin"
+  PROVIDES_PLUGINS  plugins
+  REQUIRES_MODULES  required_modules)
 
-# This is what the error is complaining about
-set(CMAKE_DESTINATION "${CMAKE_INSTALL_PREFIX}")
+foreach (module IN LISTS required_modules)
+  if (NOT TARGET "${module}")
+    message(#FATAL_ERROR
+      "Skipping example ${PROJECT_NAME}: Missing required module: "
+      "${module}")
+    return ()
+  endif ()
+endforeach ()
 
-
-set(module_files
-  "MyModule/vtk.module")
-
-vtk_module_scan(
-  MODULE_FILES ${module_files}
-  PROVIDES_MODULES modules
-  REQUIRES_MODULES required_modules
-  UNRECOGNIZED_MODULES unrecognized_modules
-  WANT_BY_DEFAULT ON)
-
-vtk_module_build(
-  MODULES ${modules})
-
-# if (VTK_WRAP_PYTHON)
-#   vtk_module_wrap_python(
-#     MODULES             ${modules}
-#     MODULE_DESTINATION  "site-packages"
-#     PYTHON_PACKAGE      my_python_module
-#   )
-# endif ()
-
-add_executable(MyStandalone main.cpp)
-target_link_libraries(MyStandalone PRIVATE MyModule VTK::IOXML)
+paraview_plugin_build(
+  RUNTIME_DESTINATION "${CMAKE_INSTALL_BINDIR}"
+  LIBRARY_DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  LIBRARY_SUBDIRECTORY "${PARAVIEW_PLUGIN_SUBDIR}"
+  PLUGINS_FILE_NAME "elev.plugins.xml"
+  DELAYED_LOAD MyFilter
+  PLUGINS ${plugins})

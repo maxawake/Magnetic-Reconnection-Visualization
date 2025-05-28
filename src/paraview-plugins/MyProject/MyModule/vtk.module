@@ -1,0 +1,6 @@
+NAME
+  MyModule
+LIBRARY_NAME
+  MyModule
+DEPENDS
+  VTK::CommonExecutionModel

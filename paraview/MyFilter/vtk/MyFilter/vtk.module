@@ -1,0 +1,7 @@
+NAME
+  prtl::MyFilter
+LIBRARY_NAME
+  prtlMyFilter
+DEPENDS
+  VTK::CommonExecutionModel
+  prtl::my_filter

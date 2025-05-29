@@ -1,6 +1,0 @@
-NAME
-  prtlMyFilterPlugin
-XML
-  MyFilter.xml
-MODULES
-  prtl::MyFilter

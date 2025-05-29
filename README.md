@@ -23,6 +23,17 @@ Most of the algorithms used in the paper are implemented as Paraview filter plug
 
 Some of the VTK filters used in this project are not exposed in paraview, such as the `vtkParallelVectors` or `vtkVectorFieldTopology` filters. They can, however, be easily used in paraview using XML filters. Examples are given in `src/paraview-plugins`.
 
+To compile the C++ filters, `cmake` and `gcc` are required. Cmake will then point out all other dependencies required. To build a paraview plugin, one also needs the Paraview SDK. Inside of the filter folder containing the `CMakeLists.txt` file, run the following commands
+```bash
+# create a build directory and change into it
+mkdir build && cd build
+# create configuration with cmake (or ccmake)
+cmake ../ -Wno-dev -GNinja 
+# compile the filter
+ninja -j4
+```
+
+
 ## Usage
 
 The typical workflow to extract singular field lines using the parallel vectors operator is similar to the following:

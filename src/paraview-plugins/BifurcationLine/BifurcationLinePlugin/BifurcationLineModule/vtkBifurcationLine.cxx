@@ -1,140 +1,263 @@
 #include "vtkBifurcationLine.h"
-#include <vtkObjectFactory.h>
-#include <vtkDataSet.h>
-#include <vtkPointData.h>
+
+#include <vtkCharArray.h>
+#include <vtkDataArray.h>
 #include <vtkDoubleArray.h>
 #include <vtkGradientFilter.h>
-#include <vtkNew.h>
-#include <vtkSmartPointer.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
+#include <vtkNew.h>
+#include <vtkObjectFactory.h>
+#include <vtkPointData.h>
+#include <vtkPolyData.h>
 
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
-#include <Eigen/Geometry>
+
+#include <algorithm>
+#include <array>
+
+#include <vtkCellLocator.h>
+#include <vtkGenericCell.h>
+#include <vtkProbeFilter.h>
+
+/* ======================================================================= */
+/*  Implementation – vtkParallelVectorsForBifurcationLine                  */
+/* ======================================================================= */
+
+vtkStandardNewMacro(vtkParallelVectorsForBifurcationLine);
+
+//-----------------------------------------------------------------------------
+vtkParallelVectorsForBifurcationLine::vtkParallelVectorsForBifurcationLine()
+  : EnableThreshold(false)
+  , MinimumCriterion(0.0)
+  , MaximumCriterion(VTK_DOUBLE_MAX)
+{
+}
+
+//-----------------------------------------------------------------------------
+void vtkParallelVectorsForBifurcationLine::Prefilter(
+  vtkInformation*, vtkInformationVector**, vtkInformationVector*)
+{
+  this->CriteriaArrays.resize(1);
+  this->CriteriaArrays[0] = vtkSmartPointer<vtkDoubleArray>::New();
+  this->CriteriaArrays[0]->SetName("bifurcation_criterion");
+}
+
+//-----------------------------------------------------------------------------
+bool vtkParallelVectorsForBifurcationLine::ComputeAdditionalCriteria(
+  const vtkIdType triPts[3], double s, double t,
+  std::vector<double>& values)
+{
+  if (!this->Jacobian)
+  {
+    vtkErrorMacro("Jacobian array not set!");
+    return false;
+  }
+
+  double Jv[3][9];
+  for (int i = 0; i < 3; ++i)
+    this->Jacobian->GetTuple(triPts[i], Jv[i]);
+
+  Eigen::Matrix<double,3,3> J;
+  for (int k = 0; k < 9; ++k)
+    J(k/3, k%3) = (1.-s-t)*Jv[0][k] + s*Jv[1][k] + t*Jv[2][k];
+
+  Eigen::EigenSolver<Eigen::Matrix<double,3,3>> es(J,false);
+  std::array<double,3> λ = { es.eigenvalues()[0].real(),
+                             es.eigenvalues()[1].real(),
+                             es.eigenvalues()[2].real() };
+  std::sort(λ.begin(), λ.end(), std::greater<double>());
+
+  double κ = -(λ[0] * λ[1]);
+
+  if (this->EnableThreshold &&
+      (κ < this->MinimumCriterion || κ > this->MaximumCriterion))
+    return false;
+
+  values[0] = κ;
+  return true;
+}
+
+/* ------------------------------------------------------------------ */
+/*  vtkParallelVectorsForBifurcationLine::Postfilter  (robust probe)  */
+/* ------------------------------------------------------------------ */
+
+void vtkParallelVectorsForBifurcationLine::Postfilter(
+    vtkInformation*,
+    vtkInformationVector**,
+    vtkInformationVector* outputVector)
+{
+  // Polyline output produced by vtkParallelVectors
+  vtkPolyData* poly = vtkPolyData::SafeDownCast(
+        outputVector->GetInformationObject(0)
+        ->Get(vtkDataObject::DATA_OBJECT()));
+  if (!poly || poly->GetNumberOfPoints()==0)
+    return;
+
+  // Dataset that still carries the Jacobian (same input we were given)
+  vtkDataSet* jacDs = vtkDataSet::SafeDownCast(this->GetInput());
+  if (!jacDs || !this->Jacobian)
+    return;
+
+  //-------------------------------------------------------------------
+  // 1) Probe Jacobian at every output point
+  //-------------------------------------------------------------------
+  vtkNew<vtkProbeFilter> probe;
+  probe->SetSourceData(jacDs);
+  probe->SetInputData(poly);
+  probe->Update();
+  vtkDataSet* probed = probe->GetOutput();
+  vtkDataArray* Jarr  = probed->GetPointData()->GetArray("Jacobian");
+  if (!Jarr)                                             // should never happen
+    return;
+
+  //-------------------------------------------------------------------
+  // 2) Compute κ = –λ₁λ₂ for each point
+  //-------------------------------------------------------------------
+  vtkNew<vtkDoubleArray> kappa;
+  kappa->SetName("bifurcation_criterion");
+  kappa->SetNumberOfComponents(1);
+  kappa->SetNumberOfTuples(Jarr->GetNumberOfTuples());
+
+  for (vtkIdType pid = 0; pid < Jarr->GetNumberOfTuples(); ++pid)
+  {
+    double Jt[9];  Jarr->GetTuple(pid, Jt);
+
+    Eigen::Matrix<double,3,3> J;
+    for (int k=0;k<9;++k)  J(k/3,k%3) = Jt[k];
+
+    Eigen::EigenSolver<Eigen::Matrix<double,3,3>> es(J,false);
+    std::array<double,3> lam = { es.eigenvalues()[0].real(),
+                                 es.eigenvalues()[1].real(),
+                                 es.eigenvalues()[2].real() };
+    std::sort(lam.begin(), lam.end(), std::greater<double>());
+    kappa->SetValue(pid, -(lam[0]*lam[1]));
+  }
+
+  //-------------------------------------------------------------------
+  // 3) Replace the operator’s placeholder array
+  //-------------------------------------------------------------------
+  poly->GetPointData()->RemoveArray("bifurcation_criterion");
+  poly->GetPointData()->AddArray(kappa);
+}
+
+/* ======================================================================= */
+/*  Implementation – vtkBifurcationLine                                    */
+/* ======================================================================= */
 
 vtkStandardNewMacro(vtkBifurcationLine);
 
-vtkBifurcationLine::vtkBifurcationLine() {
+//-----------------------------------------------------------------------------
+vtkBifurcationLine::vtkBifurcationLine()
+  : PrimaryVectorFieldName(nullptr)
+  , SecondaryVectorFieldName(nullptr)
+  , EnableThreshold(false)
+  , MinimumCriterion(0.0)
+  , MaximumCriterion(VTK_DOUBLE_MAX)
+{
   this->SetNumberOfInputPorts(1);
   this->SetNumberOfOutputPorts(1);
 }
 
-int vtkBifurcationLine::RequestData(vtkInformation* request,
-                                    vtkInformationVector** inputVector,
-                                    vtkInformationVector* outputVector)
+//-----------------------------------------------------------------------------
+vtkBifurcationLine::~vtkBifurcationLine()
 {
-  // Get input/output
-  vtkInformation* inInfo = inputVector[0]->GetInformationObject(0);
-  vtkDataSet* input = vtkDataSet::SafeDownCast(inInfo->Get(vtkDataObject::DATA_OBJECT()));
-  vtkInformation* outInfo = outputVector->GetInformationObject(0);
-  vtkPolyData* output = vtkPolyData::SafeDownCast(outInfo->Get(vtkDataObject::DATA_OBJECT()));
+  this->SetPrimaryVectorFieldName(nullptr);
+  this->SetSecondaryVectorFieldName(nullptr);
+}
 
-  if (!input || !output)
-  {
-    vtkErrorMacro("Invalid input or output");
-    return 0;
-  }
-
-  // 1. Get vector field
-  auto* vField = input->GetPointData()->GetVectors(this->FirstVectorFieldName);
-  if (!vField)
-  {
-    vtkErrorMacro("Missing vector field: " << this->FirstVectorFieldName);
-    return 0;
-  }
-
-  // 2. Compute gradient (∇v)
-  vtkNew<vtkGradientFilter> gradient;
-  gradient->SetInputData(input);
-  gradient->SetInputArrayToProcess(0, 0, 0,
-    vtkDataObject::FIELD_ASSOCIATION_POINTS, vField->GetName());
-  gradient->SetResultArrayName("Jacobian");
-  gradient->SetContainerAlgorithm(this);
-  gradient->Update();
-
-  vtkDataSet* withGradient = gradient->GetOutput();
-  auto* jacobian = withGradient->GetPointData()->GetArray("Jacobian");
-  if (!jacobian)
-  {
-    vtkErrorMacro("Failed to compute velocity gradient");
-    return 0;
-  }
-
-  // 3. Compute acceleration: a = J · v
-  vtkNew<vtkDoubleArray> acceleration;
-  acceleration->SetName("Acceleration");
-  acceleration->SetNumberOfComponents(3);
-  acceleration->SetNumberOfTuples(vField->GetNumberOfTuples());
-
-  // Simple J*v at each point
-  for (vtkIdType i = 0; i < vField->GetNumberOfTuples(); ++i)
-  {
-    double J[9], v[3], a[3] = { 0, 0, 0 };
-    jacobian->GetTuple(i, J);
-    vField->GetTuple(i, v);
-
-    for (int row = 0; row < 3; ++row)
-      for (int col = 0; col < 3; ++col)
-        a[row] += J[row * 3 + col] * v[col];
-
-    acceleration->SetTuple(i, a);
-  }
-
-  withGradient->GetPointData()->AddArray(acceleration);
-  withGradient->GetPointData()->SetActiveVectors(acceleration->GetName());
-
-  // 4. Configure ParallelVectors operator
-  this->SetInputData(withGradient);
-  this->SetSecondVectorFieldName("Acceleration");
-
-  // 5. Run vtkParallelVectors logic
-  this->Superclass::RequestData(request, inputVector, outputVector);
-  output->ShallowCopy(this->GetOutput());
+//-----------------------------------------------------------------------------
+int vtkBifurcationLine::FillInputPortInformation(int, vtkInformation* info)
+{
+  info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkDataSet");
   return 1;
 }
 
-
-bool vtkBifurcationLine::ComputeAdditionalCriteria(
-  const vtkIdType* ids, double s, double t, std::vector<double>& criteria)
+//-----------------------------------------------------------------------------
+int vtkBifurcationLine::RequestData(
+  vtkInformation*, vtkInformationVector** inVec, vtkInformationVector* outVec)
 {
-  vtkDataSet* input = vtkDataSet::SafeDownCast(this->GetInput());
-  auto* field = input->GetPointData()->GetVectors(this->FirstVectorFieldName);
+  /* -- 1. fetch input and primary field ------------------------------- */
+  vtkDataSet* inDs = vtkDataSet::GetData(inVec[0]);
 
-  double p[3][3], v[3][3];
-  for (int i = 0; i < 3; ++i) {
-    input->GetPoint(ids[i], p[i]);
-    field->GetTuple(ids[i], v[i]);
+  if (!this->PrimaryVectorFieldName)
+  {
+    vtkErrorMacro("PrimaryVectorFieldName not set.");
+    return 0;
+  }
+  vtkDataArray* v = inDs->GetPointData()->GetArray(this->PrimaryVectorFieldName);
+  if (!v || v->GetNumberOfComponents()!=3)
+  {
+    vtkErrorMacro("Cannot find 3-component array \"" << this->PrimaryVectorFieldName << "\".");
+    return 0;
   }
 
-  // Interpolate vector field
-  double w0 = 1.0 - s - t, w1 = s, w2 = t;
-  double vec[3];
-  for (int i = 0; i < 3; ++i)
-    vec[i] = w0 * v[0][i] + w1 * v[1][i] + w2 * v[2][i];
+  /* -- 2. Jacobian ---------------------------------------------------- */
+  vtkNew<vtkGradientFilter> grad;
+  grad->SetInputData(inDs);
+  grad->SetResultArrayName("Jacobian");
+  grad->ComputeVorticityOff();
+  grad->SetInputArrayToProcess(
+        0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_POINTS, v->GetName());
+  grad->Update();
+  vtkDataSet* jacDs   = grad->GetOutput();
+  vtkDataArray* jacob = jacDs->GetPointData()->GetArray("Jacobian");
 
-  // Approximate Jacobian (2 vectors from points 1 and 2 - point 0)
-  Eigen::Matrix3d J = Eigen::Matrix3d::Zero();
-  for (int i = 1; i < 3; ++i) {
-    Eigen::Vector3d dx = Eigen::Map<Eigen::Vector3d>(p[i]) - Eigen::Map<Eigen::Vector3d>(p[0]);
-    Eigen::Vector3d dv = Eigen::Map<Eigen::Vector3d>(v[i]) - Eigen::Map<Eigen::Vector3d>(v[0]);
-    if (dx.norm() > 1e-10)
-      J.col(i - 1) = dv / dx.norm();
+  /* -- 3. secondary vector (acceleration) ----------------------------- */
+  vtkDataArray* a = nullptr;
+  if (this->SecondaryVectorFieldName &&
+      jacDs->GetPointData()->HasArray(this->SecondaryVectorFieldName))
+  {
+    a = jacDs->GetPointData()->GetArray(this->SecondaryVectorFieldName);
+  }
+  else
+  {
+    vtkNew<vtkDoubleArray> acc;
+    acc->SetName("Acceleration");
+    acc->SetNumberOfComponents(3);
+    acc->SetNumberOfTuples(v->GetNumberOfTuples());
+
+    for (vtkIdType i = 0; i < v->GetNumberOfTuples(); ++i)
+    {
+      double vv[3], JJ[9], aa[3]={0,0,0};
+      v->GetTuple(i, vv);
+      jacob->GetTuple(i, JJ);
+      for (int r=0;r<3;++r)
+        for (int c=0;c<3;++c)
+          aa[r] += JJ[3*r+c]*vv[c];
+      acc->SetTuple(i, aa);
+    }
+    jacDs->GetPointData()->AddArray(acc);
+    a = acc;
   }
 
-  // Eigenvalue computation
-  Eigen::EigenSolver<Eigen::Matrix3d> solver(J);
-  Eigen::Vector3cd evals = solver.eigenvalues();
+  /* -- 4. run parallel-vectors helper --------------------------------- */
+  vtkNew<vtkParallelVectorsForBifurcationLine> pv;
+  pv->SetInputData(jacDs);
+  pv->SetJacobianDataArray(jacob);
+  pv->SetFirstVectorFieldName(v->GetName());
+  pv->SetSecondVectorFieldName(a->GetName());
+  pv->SetEnableThreshold(this->EnableThreshold);
+  pv->SetMinimumCriterion(this->MinimumCriterion);
+  pv->SetMaximumCriterion(this->MaximumCriterion);
+  pv->Update();
 
-  std::vector<double> realEvals;
-  for (int i = 0; i < 3; ++i)
-    if (std::abs(evals[i].imag()) < 1e-8)
-      realEvals.push_back(evals[i].real());
-
-  if (realEvals.size() < 2)
-    return false;
-
-  criteria = { -realEvals[0] * realEvals[1] };
-  return true;
+  /* -- 5. output ------------------------------------------------------ */
+  vtkPolyData* outPd = vtkPolyData::GetData(outVec, 0);
+  outPd->ShallowCopy(pv->GetOutput());
+  return 1;
 }
 
+//-----------------------------------------------------------------------------
+void vtkBifurcationLine::PrintSelf(ostream& os, vtkIndent indent)
+{
+  this->Superclass::PrintSelf(os, indent);
+  os << indent << "PrimaryVectorFieldName: "
+     << (this->PrimaryVectorFieldName?this->PrimaryVectorFieldName:"(none)") << "\n";
+  os << indent << "SecondaryVectorFieldName: "
+     << (this->SecondaryVectorFieldName?this->SecondaryVectorFieldName:"(none)") << "\n";
+  os << indent << "EnableThreshold: "  << (this->EnableThreshold?"On":"Off") << "\n";
+  os << indent << "MinimumCriterion: " << this->MinimumCriterion << "\n";
+  os << indent << "MaximumCriterion: " << this->MaximumCriterion << "\n";
+}

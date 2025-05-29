@@ -1,30 +1,92 @@
 <ServerManagerConfiguration>
   <ProxyGroup name="filters">
-    <SourceProxy name="BifurcationLine"
-                 class="vtkBifurcationLine"
-                 label="MRVIS Bifurcation Line Filter">
 
+    <SourceProxy name="BifurcationLine"
+      class="vtkBifurcationLine"
+      label="MRVIS Bifurcation Line Filter">
+
+      <!-- Input dataset -->
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
-          <Group name="filters"/>
-          <Group name="sources"/>
+          <Group name="filters" />
+          <Group name="sources" />
         </ProxyGroupDomain>
         <DataTypeDomain name="input_type">
-          <DataType value="vtkDataSet"/>
+          <DataType value="vtkDataSet" />
         </DataTypeDomain>
       </InputProperty>
 
-      <StringVectorProperty name="FirstVectorFieldName"
-                            command="SetFirstVectorFieldName"
-                            label="Primary Vector Field"
-                            number_of_elements="1">
-        <ArrayListDomain name="field_list">
+      <!-- Primary (velocity) vector – 3-component point-data array -->
+      <StringVectorProperty name="PrimaryVectorFieldName"
+        command="SetPrimaryVectorFieldName"
+        label="Primary Vector Field"
+        number_of_elements="1"
+        panel_widget="ArraySelection">
+        <!-- This domain turns the entry into a drop-down listing all arrays -->
+        <ArrayListDomain name="array_list">
           <RequiredProperties>
-            <Property name="Input" function="Input"/>
+            <Property name="Input" function="Input" />
           </RequiredProperties>
+          <!-- Only list POINT data arrays with 3 components -->
+          <FieldAssociationDomain name="assoc">
+            <AttributeType value="POINT" />
+          </FieldAssociationDomain>
+          <NumberOfComponents value="3" />
         </ArrayListDomain>
+        <Documentation>
+          Choose the 3-component point-data field whose Jacobian will be analysed.
+        </Documentation>
       </StringVectorProperty>
 
+      <!-- Secondary (acceleration) vector – optional 3-component array -->
+      <StringVectorProperty name="SecondaryVectorFieldName"
+        command="SetSecondaryVectorFieldName"
+        label="Secondary Vector Field"
+        number_of_elements="1"
+        default_values=""
+        panel_widget="ArraySelection">
+        <ArrayListDomain name="array_list">
+          <RequiredProperties>
+            <Property name="Input" function="Input" />
+          </RequiredProperties>
+          <FieldAssociationDomain name="assoc">
+            <AttributeType value="POINT" />
+          </FieldAssociationDomain>
+          <NumberOfComponents value="3" />
+        </ArrayListDomain>
+        <Documentation>
+          Optional: pick a second 3-component point-data field.
+          Leave empty to let the filter compute Acceleration = J·v automatically.
+        </Documentation>
+      </StringVectorProperty>
+
+      <!-- Boolean toggle (must be IntVectorProperty) -->
+      <IntVectorProperty name="EnableThreshold"
+        command="SetEnableThreshold"
+        label="Enable Thresholding"
+        number_of_elements="1"
+        default_values="0">
+        <BooleanDomain name="bool" />
+      </IntVectorProperty>
+
+      <!-- Threshold range -->
+      <DoubleVectorProperty name="MinimumCriterion"
+        command="SetMinimumCriterion"
+        label="Min –λ₁·λ₂"
+        number_of_elements="1"
+        default_values="0.0" />
+      <DoubleVectorProperty name="MaximumCriterion"
+        command="SetMaximumCriterion"
+        label="Max –λ₁·λ₂"
+        number_of_elements="1"
+        default_values="1.0e6" />
+
+      <!-- Output (hidden) -->
+      <ProxyProperty name="Output"
+        command="GetOutputPort"
+        panel_visibility="never" />
+
     </SourceProxy>
+
   </ProxyGroup>
 </ServerManagerConfiguration>

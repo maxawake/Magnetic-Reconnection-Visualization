@@ -1,0 +1,5 @@
+NAME
+  BifurcationLineModule
+DEPENDS
+  VTK::CommonCore
+  VTK::FiltersCore

@@ -5,3 +5,5 @@ DESCRIPTION
 REQUIRES_MODULES
   VTK::CommonCore
   VTK::FiltersCore
+  VTK::FiltersFlowPaths
+  Eigen3::Eigen

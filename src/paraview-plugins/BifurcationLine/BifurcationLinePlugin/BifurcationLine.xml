@@ -2,19 +2,29 @@
   <ProxyGroup name="filters">
     <SourceProxy name="BifurcationLine"
                  class="vtkBifurcationLine"
-                 label="Bifurcation Line">
-      <InputProperty
-        name="Input"
-        command="SetInputConnection"
-        label="Input">
+                 label="MRVIS Bifurcation Line Filter">
+
+      <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
-          <Group name="sources"/>
           <Group name="filters"/>
+          <Group name="sources"/>
         </ProxyGroupDomain>
         <DataTypeDomain name="input_type">
-          <DataType value="vtkPolyData"/>
+          <DataType value="vtkDataSet"/>
         </DataTypeDomain>
       </InputProperty>
+
+      <StringVectorProperty name="FirstVectorFieldName"
+                            command="SetFirstVectorFieldName"
+                            label="Primary Vector Field"
+                            number_of_elements="1">
+        <ArrayListDomain name="field_list">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+      </StringVectorProperty>
+
     </SourceProxy>
   </ProxyGroup>
 </ServerManagerConfiguration>

@@ -3,3 +3,5 @@ NAME
 DEPENDS
   VTK::CommonCore
   VTK::FiltersCore
+  VTK::FiltersFlowPaths
+  Eigen3::Eigen

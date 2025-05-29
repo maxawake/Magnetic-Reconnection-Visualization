@@ -7,16 +7,22 @@
 #include <vtkInformation.h>              // Required for vtkInformation
 #include <vtkInformationVector.h>        // Required for vtkInformationVector
 
-class BIFURCATIONLINEMODULE_EXPORT vtkBifurcationLine : public vtkPolyDataAlgorithm {
+#include <vtkParallelVectors.h>
+
+class BIFURCATIONLINEMODULE_EXPORT vtkBifurcationLine : public vtkParallelVectors
+{
+
 public:
   static vtkBifurcationLine* New();
-  vtkTypeMacro(vtkBifurcationLine, vtkPolyDataAlgorithm);
+  vtkTypeMacro(vtkBifurcationLine, vtkParallelVectors);
 
 protected:
   vtkBifurcationLine();
   ~vtkBifurcationLine() override = default;
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
+  bool ComputeAdditionalCriteria(const vtkIdType* triIds, double s, double t,
+                                 std::vector<double>& criteria) override;
 
 private:
   vtkBifurcationLine(const vtkBifurcationLine&) = delete;

@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.8)
 project(BifurcationLine)
 
 find_package(ParaView REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 # enable_testing()
@@ -33,6 +34,7 @@ paraview_plugin_build(
   RUNTIME_DESTINATION "${CMAKE_INSTALL_BINDIR}"
   LIBRARY_DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   LIBRARY_SUBDIRECTORY "${PARAVIEW_PLUGIN_SUBDIR}"
-  PLUGINS_FILE_NAME "elev.plugins.xml"
+  PLUGINS_FILE_NAME "bifurcation.plugins.xml"
   DELAYED_LOAD BifurcationLine
   PLUGINS ${plugins})
+

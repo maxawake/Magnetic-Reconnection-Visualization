@@ -1,21 +1,18 @@
-// vtkBifurcationLine.cxx
-
 #include "vtkBifurcationLine.h"
 
-#include <vtkArrayCalculator.h>
-#include <vtkArrayDispatch.h>
-#include <vtkCharArray.h>
-#include <vtkDataArray.h>
-#include <vtkDataSet.h>
-#include <vtkDoubleArray.h>
-#include <vtkGradientFilter.h>
-#include <vtkInformation.h>
-#include <vtkInformationVector.h>
-#include <vtkNew.h>
-#include <vtkObjectFactory.h>
-#include <vtkPointData.h>
-#include <vtkPolyData.h>
-#include <vtkSMPTools.h>
+#include "vtkArrayDispatch.h"
+#include "vtkCharArray.h"
+#include "vtkDataArray.h"
+#include "vtkDataSet.h"
+#include "vtkDoubleArray.h"
+#include "vtkGradientFilter.h"
+#include "vtkInformation.h"
+#include "vtkInformationVector.h"
+#include "vtkNew.h"
+#include "vtkObjectFactory.h"
+#include "vtkPointData.h"
+#include "vtkPolyData.h"
+#include "vtkSMPTools.h"
 
 #include <eigen3/Eigen/Eigenvalues>
 #include <eigen3/Eigen/Geometry>
@@ -23,26 +20,112 @@
 #include <algorithm>
 #include <array>
 
+//-----------------------------------------------------------------------------
 // Compute κ = –(λ_min * λ_max)
 static bool computeBifurcationCriteria(const double J[9], double &criterion)
 {
-  Eigen::Matrix<double,3,3> mat;
-  for (int i = 0; i < 9; ++i)
-  {
-    mat(i/3, i%3) = J[i];
-  }
-  Eigen::EigenSolver<Eigen::Matrix<double,3,3>> es(mat, false);
-  std::array<double,3> lam = {
-    es.eigenvalues()[0].real(),
-    es.eigenvalues()[1].real(),
-    es.eigenvalues()[2].real()
-  };
-  std::sort(lam.begin(), lam.end()); // lam[0]=min, lam[2]=max
-  criterion = -(lam[0] * lam[2]);
-  return true;
+    Eigen::Matrix<double, 3, 3> mat;
+    for (int i = 0; i < 9; ++i)
+        mat(i / 3, i % 3) = J[i];
+    Eigen::EigenSolver<Eigen::Matrix<double, 3, 3>> es(mat, false);
+    std::array<double, 3> lam = {
+        es.eigenvalues()[0].real(),
+        es.eigenvalues()[1].real(),
+        es.eigenvalues()[2].real()};
+    std::sort(lam.begin(), lam.end()); // lam[0]=min, lam[2]=max
+    criterion = -(lam[0] * lam[2]);
+    return true;
 }
 
-//------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+// Functor from vtkVortexCore: A*b = x  (here a 3×3 jacobian × vector → acceleration)
+template <typename AArrayType, typename BArrayType, typename XArrayType>
+class MatrixVectorMultiplyFunctor
+{
+    AArrayType *AArray;
+    BArrayType *BArray;
+    XArrayType *XArray;
+    vtkBifurcationLine *Filter;
+
+public:
+    MatrixVectorMultiplyFunctor(
+        AArrayType *a, BArrayType *b, XArrayType *x, vtkBifurcationLine *f)
+        : AArray(a), BArray(b), XArray(x), Filter(f) {}
+
+    void operator()(vtkIdType begin, vtkIdType end)
+    {
+        const auto aRange = vtk::DataArrayTupleRange<9>(AArray, begin, end);
+        const auto bRange = vtk::DataArrayTupleRange<3>(BArray, begin, end);
+        auto xRange = vtk::DataArrayTupleRange<3>(XArray, begin, end);
+
+        auto aIt = aRange.cbegin();
+        auto bIt = bRange.cbegin();
+        auto xIt = xRange.begin();
+        bool first = vtkSMPTools::GetSingleThread();
+
+        for (; aIt != aRange.cend(); ++aIt, ++bIt, ++xIt)
+        {
+            if (first)
+            {
+                Filter->CheckAbort();
+            }
+            if (Filter->GetAbortOutput())
+            {
+                break;
+            }
+
+            for (int i = 0; i < 3; ++i)
+            {
+                (*xIt)[i] =
+                    (*aIt)[0 + i * 3] * (*bIt)[0] +
+                    (*aIt)[1 + i * 3] * (*bIt)[1] +
+                    (*aIt)[2 + i * 3] * (*bIt)[2];
+            }
+        }
+    }
+};
+
+struct MatrixVectorMultiplyWorker
+{
+    template <typename AArrayType, typename BArrayType, typename XArrayType>
+    void operator()(AArrayType *a, BArrayType *b, XArrayType *x, vtkBifurcationLine *f)
+    {
+        MatrixVectorMultiplyFunctor<AArrayType, BArrayType, XArrayType> fun(a, b, x, f);
+        vtkSMPTools::For(0, x->GetNumberOfTuples(), fun);
+    }
+};
+
+//-----------------------------------------------------------------------------
+// Functor to build accepted‐points mask in parallel
+struct ComputeMaskFunctor
+{
+    vtkDataArray *Jacobian;
+    vtkCharArray *Mask;
+    double MinC, MaxC;
+    vtkBifurcationLine *Filter;
+
+    ComputeMaskFunctor(vtkDataArray *j, vtkCharArray *m,
+                       double minC, double maxC,
+                       vtkBifurcationLine *f)
+        : Jacobian(j), Mask(m), MinC(minC), MaxC(maxC), Filter(f) {}
+
+    void operator()(vtkIdType begin, vtkIdType end)
+    {
+        double J[9], crit;
+        for (vtkIdType i = begin; i < end; ++i)
+        {
+            if (Filter->CheckAbort() || Filter->GetAbortOutput())
+                break;
+            Jacobian->GetTuple(i, J);
+            computeBifurcationCriteria(J, crit);
+            bool keep = !Filter->GetEnableThreshold() ||
+                        (crit >= MinC && crit <= MaxC);
+            Mask->SetValue(i, keep ? 1 : 0);
+        }
+    }
+};
+
+//-----------------------------------------------------------------------------
 // vtkParallelVectorsForBifurcationLine
 vtkStandardNewMacro(vtkParallelVectorsForBifurcationLine);
 
@@ -66,23 +149,19 @@ bool vtkParallelVectorsForBifurcationLine::ComputeAdditionalCriteria(
     const vtkIdType pts[3], double s, double t,
     std::vector<double> &values)
 {
-    double Jv[3][9];
+    double Jv[3][9], Ji[9], crit;
     for (int i = 0; i < 3; ++i)
     {
         this->Jacobian->GetTuple(pts[i], Jv[i]);
     }
-    double Ji[9];
     for (int k = 0; k < 9; ++k)
-    {
         Ji[k] = (1. - s - t) * Jv[0][k] + s * Jv[1][k] + t * Jv[2][k];
-    }
-    double crit;
     computeBifurcationCriteria(Ji, crit);
     values[0] = crit;
     return true;
 }
 
-//------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 // vtkBifurcationLine
 vtkStandardNewMacro(vtkBifurcationLine);
 
@@ -102,7 +181,9 @@ int vtkBifurcationLine::FillInputPortInformation(int, vtkInformation *info)
 }
 
 int vtkBifurcationLine::RequestData(
-    vtkInformation *, vtkInformationVector **inVec, vtkInformationVector *outVec)
+    vtkInformation *,
+    vtkInformationVector **inVec,
+    vtkInformationVector *outVec)
 {
     // 1) fetch input velocity
     vtkDataSet *input = vtkDataSet::GetData(inVec[0]);
@@ -114,54 +195,58 @@ int vtkBifurcationLine::RequestData(
         return 0;
     }
 
-    // 2) compute Jacobian = ∇v
+    // 2) compute ∇v (Jacobian)
     vtkNew<vtkGradientFilter> grad;
     grad->SetInputData(input);
     grad->SetResultArrayName("Jacobian");
     grad->ComputeVorticityOff();
     grad->SetInputArrayToProcess(
-        0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_POINTS, velocity->GetName());
+        0, 0, 0,
+        vtkDataObject::FIELD_ASSOCIATION_POINTS,
+        velocity->GetName());
     grad->Update();
     vtkDataSet *gradOut = grad->GetOutput();
     vtkDataArray *jacobian =
         gradOut->GetPointData()->GetArray("Jacobian");
 
-    // 3) compute acceleration a = J * v
+    // 3) acceleration = J * v  (multi-threaded)
     vtkNew<vtkDoubleArray> acceleration;
     acceleration->SetName("acceleration");
     acceleration->SetNumberOfComponents(3);
     vtkIdType nt = velocity->GetNumberOfTuples();
     acceleration->SetNumberOfTuples(nt);
-    for (vtkIdType i = 0; i < nt; ++i)
+
+    MatrixVectorMultiplyWorker mvWorker;
+    using Dispatcher = vtkArrayDispatch::Dispatch3ByValueType<
+        vtkArrayDispatch::Reals,
+        vtkArrayDispatch::Reals,
+        vtkArrayDispatch::Reals>;
+    if (!Dispatcher::Execute(jacobian, velocity,
+                             acceleration.GetPointer(),
+                             mvWorker, this))
     {
-        double Jt[9], vv[3], aa[3] = {0, 0, 0};
-        jacobian->GetTuple(i, Jt);
-        velocity->GetTuple(i, vv);
-        for (int r = 0; r < 3; ++r)
-            for (int c = 0; c < 3; ++c)
-                aa[r] += Jt[3 * r + c] * vv[c];
-        acceleration->SetTuple(i, aa);
+        mvWorker(jacobian, velocity,
+                 acceleration.GetPointer(), this);
     }
     gradOut->GetPointData()->AddArray(acceleration);
 
-    // 4) build mask of accepted points
+    // 4) build accepted-points mask (multi-threaded)
     vtkNew<vtkCharArray> acceptedPoints;
     acceptedPoints->SetName("acceptedPoints");
     acceptedPoints->SetNumberOfTuples(nt);
-    for (vtkIdType i = 0; i < nt; ++i)
-    {
-        double Jt[9], crit;
-        jacobian->GetTuple(i, Jt);
-        computeBifurcationCriteria(Jt, crit);
-        bool keep = !this->EnableThreshold || (crit >= this->MinimumCriterion && crit <= this->MaximumCriterion);
-        acceptedPoints->SetValue(i, keep ? 1 : 0);
-    }
 
-    // 5) run parallel-vectors helper
+    ComputeMaskFunctor maskFun(jacobian,
+                               acceptedPoints.GetPointer(),
+                               this->MinimumCriterion,
+                               this->MaximumCriterion,
+                               this);
+    vtkSMPTools::For(0, nt, maskFun);
+
+    // 5) run parallel-vectors
     vtkNew<vtkParallelVectorsForBifurcationLine> pv;
     pv->SetInputData(gradOut);
     pv->SetJacobian(jacobian);
-    pv->SetAcceptedPoints(acceptedPoints);
+    pv->SetAcceptedPoints(acceptedPoints.GetPointer());
     pv->SetFirstVectorFieldName(velocity->GetName());
     pv->SetSecondVectorFieldName(acceleration->GetName());
     pv->Update();
@@ -177,9 +262,8 @@ void vtkBifurcationLine::PrintSelf(ostream &os, vtkIndent indent)
     this->Superclass::PrintSelf(os, indent);
     os << indent << "PrimaryVectorFieldName: "
        << (this->PrimaryVectorFieldName ? this->PrimaryVectorFieldName : "(none)") << "\n";
-    os << indent << "SecondaryVectorFieldName: "
-       << (this->SecondaryVectorFieldName ? this->SecondaryVectorFieldName : "(none)") << "\n";
-    os << indent << "EnableThreshold: " << (this->EnableThreshold ? "On" : "Off") << "\n";
+    os << indent << "EnableThreshold: "
+       << (this->EnableThreshold ? "On" : "Off") << "\n";
     os << indent << "MinimumCriterion: " << this->MinimumCriterion << "\n";
     os << indent << "MaximumCriterion: " << this->MaximumCriterion << "\n";
 }

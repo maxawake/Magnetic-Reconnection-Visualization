@@ -44,8 +44,8 @@
         label="Secondary Vector Field"
         number_of_elements="1"
         default_values=""
-        panel_widget="ArraySelection">
-        <ArrayListDomain name="array_list">
+        panel_widget="OptionalArraySelection">
+        <OptionalArrayListDomain name="array_list">
           <RequiredProperties>
             <Property name="Input" function="Input" />
           </RequiredProperties>
@@ -53,7 +53,7 @@
             <AttributeType value="POINT" />
           </FieldAssociationDomain>
           <NumberOfComponents value="3" />
-        </ArrayListDomain>
+        </OptionalArrayListDomain>
         <Documentation>
           Optional: pick a second 3-component point-data field.
           Leave empty to let the filter compute Acceleration = J·v automatically.

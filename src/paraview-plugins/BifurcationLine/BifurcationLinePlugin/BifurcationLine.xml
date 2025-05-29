@@ -81,6 +81,34 @@
         number_of_elements="1"
         default_values="1.0e6" />
 
+      <!-- Enable length filtering -->
+      <IntVectorProperty name="EnableLengthFilter"
+        command="SetEnableLengthFilter"
+        label="Enable Length Filter"
+        number_of_elements="1" default_values="0">
+        <BooleanDomain name="bool" />
+      </IntVectorProperty>
+      <IntVectorProperty name="MinimumCells"
+        command="SetMinimumCells"
+        label="Minimum # Cells"
+        number_of_elements="1" default_values="2">
+        <HintString text="Discard any polyline shorter than this." />
+      </IntVectorProperty>
+
+      <!-- Enable angle‐turn filtering -->
+      <IntVectorProperty name="EnableAngleFilter"
+        command="SetEnableAngleFilter"
+        label="Enable Angle Filter"
+        number_of_elements="1" default_values="0">
+        <BooleanDomain name="bool" />
+      </IntVectorProperty>
+      <DoubleVectorProperty name="MaximumTangentAngle"
+        command="SetMaximumTangentAngle"
+        label="Max Turn Angle (deg)"
+        number_of_elements="1" default_values="45.0">
+        <HintString text="Discard any line segment whose turn angle exceeds this." />
+      </DoubleVectorProperty>
+
       <!-- Output (hidden) -->
       <ProxyProperty name="Output"
         command="GetOutputPort"

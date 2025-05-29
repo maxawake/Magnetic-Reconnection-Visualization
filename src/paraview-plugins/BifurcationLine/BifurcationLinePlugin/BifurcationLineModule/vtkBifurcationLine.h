@@ -8,8 +8,8 @@
 #include <vtkPolyDataAlgorithm.h>
 #include <vtkSmartPointer.h>
 
-#include <vtkCharArray.h>    
-#include <vtkDataArray.h>  
+#include <vtkCharArray.h>
+#include <vtkDataArray.h>
 /* ------------------------------------------------------------------------- */
 /*  Internal helper – runs the actual Parallel-Vectors operator and computes
  *  κ = –(λ_min * λ_max).  Users never create this directly; the wrapper does.
@@ -18,28 +18,28 @@ class BIFURCATIONLINEMODULE_EXPORT vtkParallelVectorsForBifurcationLine
     : public vtkParallelVectors
 {
 public:
-  static vtkParallelVectorsForBifurcationLine *New();
-  vtkTypeMacro(vtkParallelVectorsForBifurcationLine, vtkParallelVectors);
+    static vtkParallelVectorsForBifurcationLine *New();
+    vtkTypeMacro(vtkParallelVectorsForBifurcationLine, vtkParallelVectors);
 
-  void SetJacobian(vtkDataArray *jac) { this->Jacobian = jac; }
-  void SetAcceptedPoints(vtkCharArray *acc) { this->AcceptedPoints = acc; }
+    void SetJacobian(vtkDataArray *jac) { this->Jacobian = jac; }
+    void SetAcceptedPoints(vtkCharArray *acc) { this->AcceptedPoints = acc; }
 
 protected:
-  vtkParallelVectorsForBifurcationLine() = default;
-  ~vtkParallelVectorsForBifurcationLine() override = default;
+    vtkParallelVectorsForBifurcationLine() = default;
+    ~vtkParallelVectorsForBifurcationLine() override = default;
 
-  void Prefilter(vtkInformation *, vtkInformationVector **, vtkInformationVector *);
-  bool AcceptSurfaceTriangle(const vtkIdType surfaceSimplexIndices[3]);
-  bool ComputeAdditionalCriteria(const vtkIdType surfaceSimplexIndices[3],
-                                 double s, double t,
-                                 std::vector<double> &criterionArrayValues);
+    void Prefilter(vtkInformation *, vtkInformationVector **, vtkInformationVector *);
+    bool AcceptSurfaceTriangle(const vtkIdType surfaceSimplexIndices[3]);
+    bool ComputeAdditionalCriteria(const vtkIdType surfaceSimplexIndices[3],
+                                   double s, double t,
+                                   std::vector<double> &criterionArrayValues);
 
-  vtkSmartPointer<vtkCharArray> AcceptedPoints;
-  vtkSmartPointer<vtkDataArray> Jacobian;
+    vtkSmartPointer<vtkCharArray> AcceptedPoints;
+    vtkSmartPointer<vtkDataArray> Jacobian;
 
 private:
-  vtkParallelVectorsForBifurcationLine(const vtkParallelVectorsForBifurcationLine &) = delete;
-  void operator=(const vtkParallelVectorsForBifurcationLine &) = delete;
+    vtkParallelVectorsForBifurcationLine(const vtkParallelVectorsForBifurcationLine &) = delete;
+    void operator=(const vtkParallelVectorsForBifurcationLine &) = delete;
 };
 
 /* ------------------------------------------------------------------------- */
@@ -50,39 +50,55 @@ class BIFURCATIONLINEMODULE_EXPORT vtkBifurcationLine
     : public vtkPolyDataAlgorithm
 {
 public:
-  static vtkBifurcationLine *New();
-  vtkTypeMacro(vtkBifurcationLine, vtkPolyDataAlgorithm);
-  void PrintSelf(ostream &os, vtkIndent indent) override;
+    static vtkBifurcationLine *New();
+    vtkTypeMacro(vtkBifurcationLine, vtkPolyDataAlgorithm);
+    void PrintSelf(ostream &os, vtkIndent indent) override;
 
-  vtkSetStringMacro(PrimaryVectorFieldName);
-  vtkGetStringMacro(PrimaryVectorFieldName);
-  vtkSetStringMacro(SecondaryVectorFieldName);
-  vtkGetStringMacro(SecondaryVectorFieldName);
+    vtkSetStringMacro(PrimaryVectorFieldName);
+    vtkGetStringMacro(PrimaryVectorFieldName);
+    vtkSetStringMacro(SecondaryVectorFieldName);
+    vtkGetStringMacro(SecondaryVectorFieldName);
 
-  vtkSetMacro(EnableThreshold, bool);
-  vtkGetMacro(EnableThreshold, bool);
-  vtkSetMacro(MinimumCriterion, double);
-  vtkGetMacro(MinimumCriterion, double);
-  vtkSetMacro(MaximumCriterion, double);
-  vtkGetMacro(MaximumCriterion, double);
+    vtkSetMacro(EnableThreshold, bool);
+    vtkGetMacro(EnableThreshold, bool);
+    vtkSetMacro(MinimumCriterion, double);
+    vtkGetMacro(MinimumCriterion, double);
+    vtkSetMacro(MaximumCriterion, double);
+    vtkGetMacro(MaximumCriterion, double);
+
+    // --- length filter ---
+    vtkSetMacro(EnableLengthFilter, bool);
+    vtkGetMacro(EnableLengthFilter, bool);
+    vtkSetMacro(MinimumCells, int);
+    vtkGetMacro(MinimumCells, int);
+
+    // --- angle‐turn filter ---
+    vtkSetMacro(EnableAngleFilter, bool);
+    vtkGetMacro(EnableAngleFilter, bool);
+    vtkSetMacro(MaximumTangentAngle, double);
+    vtkGetMacro(MaximumTangentAngle, double);
 
 protected:
-  vtkBifurcationLine();
-  ~vtkBifurcationLine() override;
+    vtkBifurcationLine();
+    ~vtkBifurcationLine() override;
 
-  int FillInputPortInformation(int, vtkInformation *) override;
-  int RequestData(vtkInformation *, vtkInformationVector **, vtkInformationVector *) override;
+    int FillInputPortInformation(int, vtkInformation *) override;
+    int RequestData(vtkInformation *, vtkInformationVector **, vtkInformationVector *) override;
 
-  char *PrimaryVectorFieldName{nullptr};
-  char *SecondaryVectorFieldName{nullptr};
+    char *PrimaryVectorFieldName{nullptr};
+    char *SecondaryVectorFieldName{nullptr};
 
-  bool EnableThreshold;
-  double MinimumCriterion;
-  double MaximumCriterion;
+    bool EnableThreshold;
+    double MinimumCriterion;
+    double MaximumCriterion;
+    bool EnableLengthFilter;
+    int MinimumCells;
+    bool EnableAngleFilter;
+    double MaximumTangentAngle;
 
 private:
-  vtkBifurcationLine(const vtkBifurcationLine &) = delete;
-  void operator=(const vtkBifurcationLine &) = delete;
+    vtkBifurcationLine(const vtkBifurcationLine &) = delete;
+    void operator=(const vtkBifurcationLine &) = delete;
 };
 
 #endif // vtkBifurcationLine_h

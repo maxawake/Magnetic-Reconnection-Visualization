@@ -13,6 +13,8 @@
 #include "vtkPointData.h"
 #include "vtkPolyData.h"
 #include "vtkSMPTools.h"
+#include <vtkCellData.h>
+
 
 #include <eigen3/Eigen/Eigenvalues>
 #include <eigen3/Eigen/Geometry>
@@ -251,9 +253,87 @@ int vtkBifurcationLine::RequestData(
     pv->SetSecondVectorFieldName(acceleration->GetName());
     pv->Update();
 
-    // 6) deliver output
+    vtkPolyData *raw = pv->GetOutput();
+    vtkNew<vtkPolyData> filtered;
+    vtkNew<vtkPoints> newPoints;
+    vtkNew<vtkCellArray> newLines;
+
+    // we'll need to copy point‐data arrays too:
+    filtered->GetPointData()->ShallowCopy(raw->GetPointData());
+
+    std::unordered_map<vtkIdType, vtkIdType> pointMap;
+    vtkIdType oldId, newId;
+    const double tol = 1e-6;
+    vtkIdType npts;
+    const vtkIdType *pts;
+
+    // iterate each line cell
+    raw->GetLines()->InitTraversal();
+    while (raw->GetLines()->GetNextCell(npts, pts))
+    {
+        // 1) length filter (#cells = npts-1)
+        if (this->EnableLengthFilter && (npts - 1) < this->MinimumCells)
+        {
+            continue;
+        }
+
+        // 2) angle‐turn filter
+        bool badTurn = false;
+        if (this->EnableAngleFilter && npts >= 3)
+        {
+            for (vtkIdType i = 0; i + 2 < npts; ++i)
+            {
+                double p0[3], p1[3], p2[3], v1[3], v2[3];
+                raw->GetPoint(pts[i], p0);
+                raw->GetPoint(pts[i + 1], p1);
+                raw->GetPoint(pts[i + 2], p2);
+                vtkMath::Subtract(p1, p0, v1);
+                vtkMath::Subtract(p2, p1, v2);
+                vtkMath::Normalize(v1);
+                vtkMath::Normalize(v2);
+                double dot = std::clamp(vtkMath::Dot(v1, v2), -1.0, 1.0);
+                double angle = vtkMath::DegreesFromRadians(acos(dot));
+                if (angle > this->MaximumTangentAngle)
+                {
+                    badTurn = true;
+                    break;
+                }
+            }
+        }
+        if (badTurn)
+        {
+            continue;
+        }
+
+        // 3) accept this line → remap its points
+        std::vector<vtkIdType> newIds(npts);
+        for (vtkIdType j = 0; j < npts; ++j)
+        {
+            oldId = pts[j];
+            auto it = pointMap.find(oldId);
+            if (it == pointMap.end())
+            {
+                double p[3];
+                raw->GetPoint(oldId, p);
+                newId = newPoints->InsertNextPoint(p);
+                pointMap[oldId] = newId;
+                it = pointMap.find(oldId);
+            }
+            newIds[j] = it->second;
+        }
+        newLines->InsertNextCell(npts, newIds.data());
+    }
+
+    // plug into filtered output
+    filtered->SetPoints(newPoints);
+    filtered->SetLines(newLines);
+
+    // finally shallow‐copy any remaining cell‐data arrays
+    filtered->GetCellData()->ShallowCopy(raw->GetCellData());
+
+    // 7) hand it back
     vtkPolyData *outPd = vtkPolyData::GetData(outVec, 0);
-    outPd->ShallowCopy(pv->GetOutput());
+    outPd->ShallowCopy(filtered);
     return 1;
 }
 

@@ -38,6 +38,7 @@ protected:
 
   void Postfilter(vtkInformation*, vtkInformationVector**,
                   vtkInformationVector* outputVector) override;
+  bool AcceptSurfaceTriangle(const vtkIdType triPts[3]) override;
 
   vtkSmartPointer<vtkDataArray> Jacobian;
   bool   EnableThreshold;

@@ -1,120 +1,122 @@
 <ServerManagerConfiguration>
   <ProxyGroup name="filters">
-
     <SourceProxy name="BifurcationLine"
-      class="vtkBifurcationLine"
-      label="MRVIS Bifurcation Line Filter">
+                 class="vtkBifurcationLine"
+                 label="MRVIS Bifurcation Line Filter">
 
-      <!-- Input dataset -->
+      <!-- Input -->
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
-          <Group name="filters" />
-          <Group name="sources" />
+          <Group name="filters"/>
+          <Group name="sources"/>
         </ProxyGroupDomain>
         <DataTypeDomain name="input_type">
-          <DataType value="vtkDataSet" />
+          <DataType value="vtkDataSet"/>
         </DataTypeDomain>
       </InputProperty>
 
-      <!-- Primary (velocity) vector – 3-component point-data array -->
+      <!-- Primary Vector -->
       <StringVectorProperty name="PrimaryVectorFieldName"
-        command="SetPrimaryVectorFieldName"
-        label="Primary Vector Field"
-        number_of_elements="1"
-        panel_widget="ArraySelection">
-        <!-- This domain turns the entry into a drop-down listing all arrays -->
+                            command="SetPrimaryVectorFieldName"
+                            label="Primary Vector Field"
+                            number_of_elements="1"
+                            panel_widget="ArraySelection">
         <ArrayListDomain name="array_list">
           <RequiredProperties>
-            <Property name="Input" function="Input" />
+            <Property name="Input" function="Input"/>
           </RequiredProperties>
-          <!-- Only list POINT data arrays with 3 components -->
           <FieldAssociationDomain name="assoc">
-            <AttributeType value="POINT" />
+            <AttributeType value="POINT"/>
           </FieldAssociationDomain>
-          <NumberOfComponents value="3" />
+          <NumberOfComponents value="3"/>
+        </ArrayListDomain>
+      </StringVectorProperty>
+
+      <!-- Secondary Vector (optional) -->
+      <StringVectorProperty name="SecondaryVectorFieldName"
+                            command="SetSecondaryVectorFieldName"
+                            label="Secondary Vector Field"
+                            number_of_elements="1"
+                            panel_widget="OptionalArraySelection">
+        <ArrayListDomain name="array_list" optional="1">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+          <FieldAssociationDomain name="assoc">
+            <AttributeType value="POINT"/>
+          </FieldAssociationDomain>
+          <NumberOfComponents value="3"/>
         </ArrayListDomain>
         <Documentation>
-          Choose the 3-component point-data field whose Jacobian will be analysed.
+          Optional 3-component point-data. Leave blank to compute acceleration automatically.
         </Documentation>
       </StringVectorProperty>
 
-      <!-- Secondary (acceleration) vector – optional 3-component array -->
-      <StringVectorProperty name="SecondaryVectorFieldName"
-        command="SetSecondaryVectorFieldName"
-        label="Secondary Vector Field"
-        number_of_elements="1"
-        default_values=""
-        panel_widget="OptionalArraySelection">
-        <OptionalArrayListDomain name="array_list">
-          <RequiredProperties>
-            <Property name="Input" function="Input" />
-          </RequiredProperties>
-          <FieldAssociationDomain name="assoc">
-            <AttributeType value="POINT" />
-          </FieldAssociationDomain>
-          <NumberOfComponents value="3" />
-        </OptionalArrayListDomain>
-        <Documentation>
-          Optional: pick a second 3-component point-data field.
-          Leave empty to let the filter compute Acceleration = J·v automatically.
-        </Documentation>
-      </StringVectorProperty>
-
-      <!-- Boolean toggle (must be IntVectorProperty) -->
+      <!-- Threshold toggle & slider (min fixed at 0) -->
       <IntVectorProperty name="EnableThreshold"
-        command="SetEnableThreshold"
-        label="Enable Thresholding"
-        number_of_elements="1"
-        default_values="0">
-        <BooleanDomain name="bool" />
+                         command="SetEnableThreshold"
+                         label="Enable Thresholding"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
       </IntVectorProperty>
-
-      <!-- Threshold range -->
-      <DoubleVectorProperty name="MinimumCriterion"
-        command="SetMinimumCriterion"
-        label="Min –λ₁·λ₂"
-        number_of_elements="1"
-        default_values="0.0" />
       <DoubleVectorProperty name="MaximumCriterion"
-        command="SetMaximumCriterion"
-        label="Max –λ₁·λ₂"
-        number_of_elements="1"
-        default_values="1.0e6" />
-
-      <!-- Enable length filtering -->
-      <IntVectorProperty name="EnableLengthFilter"
-        command="SetEnableLengthFilter"
-        label="Enable Length Filter"
-        number_of_elements="1" default_values="0">
-        <BooleanDomain name="bool" />
-      </IntVectorProperty>
-      <IntVectorProperty name="MinimumCells"
-        command="SetMinimumCells"
-        label="Minimum # Cells"
-        number_of_elements="1" default_values="2">
-        <HintString text="Discard any polyline shorter than this." />
-      </IntVectorProperty>
-
-      <!-- Enable angle‐turn filtering -->
-      <IntVectorProperty name="EnableAngleFilter"
-        command="SetEnableAngleFilter"
-        label="Enable Angle Filter"
-        number_of_elements="1" default_values="0">
-        <BooleanDomain name="bool" />
-      </IntVectorProperty>
-      <DoubleVectorProperty name="MaximumTangentAngle"
-        command="SetMaximumTangentAngle"
-        label="Max Turn Angle (deg)"
-        number_of_elements="1" default_values="45.0">
-        <HintString text="Discard any line segment whose turn angle exceeds this." />
+                            command="SetMaximumCriterion"
+                            label="Max –λ₁·λ₂"
+                            number_of_elements="1"
+                            default_values="1.0e6"
+                            panel_widget="Slider">
+        <DoubleRangeDomain name="range" min="0.0" max="10"/>
+        <Documentation>
+          Maximum –λ₁·λ₂ (minimum is always 0).
+        </Documentation>
       </DoubleVectorProperty>
 
-      <!-- Output (hidden) -->
+      <!-- Length filter toggle & slider -->
+      <IntVectorProperty name="EnableLengthFilter"
+                         command="SetEnableLengthFilter"
+                         label="Enable Length Filter"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+      <IntVectorProperty name="MinimumCells"
+                         command="SetMinimumCells"
+                         label="Minimum # Cells"
+                         number_of_elements="1"
+                         default_values="2"
+                         panel_widget="Slider">
+        <IntRangeDomain name="range" min="1" max="100"/>
+        <Documentation>
+          Discard any polyline shorter than this many cells.
+        </Documentation>
+      </IntVectorProperty>
+
+      <!-- Angle filter toggle & slider -->
+      <IntVectorProperty name="EnableAngleFilter"
+                         command="SetEnableAngleFilter"
+                         label="Enable Angle Filter"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+      <DoubleVectorProperty name="MaximumTangentAngle"
+                            command="SetMaximumTangentAngle"
+                            label="Max Turn Angle (°)"
+                            number_of_elements="1"
+                            default_values="45.0"
+                            panel_widget="Slider">
+        <DoubleRangeDomain name="range" min="0.0" max="180.0"/>
+        <Documentation>
+          Discard segments whose turn exceeds this angle (in degrees).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <!-- hidden output -->
       <ProxyProperty name="Output"
-        command="GetOutputPort"
-        panel_visibility="never" />
+                     command="GetOutputPort"
+                     panel_visibility="never"/>
 
     </SourceProxy>
-
   </ProxyGroup>
 </ServerManagerConfiguration>

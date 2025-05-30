@@ -15,6 +15,7 @@ plugin_list = [
     "mrvisPseudoBifurcationLine.py",
     "mrvisStreamTube.py",
     "mrvisEigenvalues.py",
+    "mrvisReconnectionRate.py",
 ]
 
 model_list = ["mrvis3DMagneticReconnection.py", "mrvisCriticalPoint.py", "mrvisSingularFieldLine.py"]

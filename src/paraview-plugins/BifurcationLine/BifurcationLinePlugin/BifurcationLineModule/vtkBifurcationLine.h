@@ -3,14 +3,14 @@
 #ifndef vtkBifurcationLine_h
 #define vtkBifurcationLine_h
 
-#include "BifurcationLineModuleModule.h" // your generated export macro
+#include "BifurcationLineModuleModule.h" 
 #include <vtkParallelVectors.h>
 #include <vtkPolyDataAlgorithm.h>
 #include <vtkSmartPointer.h>
 
 #include <vtkCharArray.h>
 #include <vtkDataArray.h>
-/* ------------------------------------------------------------------------- */
+/*- */
 /*  Internal helper – runs the actual Parallel-Vectors operator and computes
  *  κ = –(λ_min * λ_max).  Users never create this directly; the wrapper does.
  */
@@ -42,7 +42,7 @@ private:
     void operator=(const vtkParallelVectorsForBifurcationLine &) = delete;
 };
 
-/* ------------------------------------------------------------------------- */
+/*- */
 /*  User-visible filter – lets the user pick the vector arrays, builds
  *  Jacobian & acceleration, then runs the helper above.
  */
@@ -59,6 +59,7 @@ public:
     vtkSetStringMacro(SecondaryVectorFieldName);
     vtkGetStringMacro(SecondaryVectorFieldName);
 
+    // bifurcation criterion
     vtkSetMacro(EnableThreshold, bool);
     vtkGetMacro(EnableThreshold, bool);
     vtkSetMacro(MinimumCriterion, double);
@@ -66,13 +67,13 @@ public:
     vtkSetMacro(MaximumCriterion, double);
     vtkGetMacro(MaximumCriterion, double);
 
-    // --- length filter ---
+    // length filter
     vtkSetMacro(EnableLengthFilter, bool);
     vtkGetMacro(EnableLengthFilter, bool);
     vtkSetMacro(MinimumCells, int);
     vtkGetMacro(MinimumCells, int);
 
-    // --- angle‐turn filter ---
+    // angle‐turn filter
     vtkSetMacro(EnableAngleFilter, bool);
     vtkGetMacro(EnableAngleFilter, bool);
     vtkSetMacro(MaximumTangentAngle, double);

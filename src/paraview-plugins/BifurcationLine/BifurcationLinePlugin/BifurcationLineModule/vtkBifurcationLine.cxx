@@ -187,7 +187,7 @@ int vtkBifurcationLine::RequestData(
     vtkInformationVector **inVec,
     vtkInformationVector *outVec)
 {
-    // 1) fetch input velocity
+    // fetch input velocity
     vtkDataSet *input = vtkDataSet::GetData(inVec[0]);
     vtkDataArray *velocity =
         input->GetPointData()->GetVectors(this->PrimaryVectorFieldName);
@@ -197,7 +197,7 @@ int vtkBifurcationLine::RequestData(
         return 0;
     }
 
-    // 2) compute ∇v (Jacobian)
+    // compute ∇v (Jacobian)
     vtkNew<vtkGradientFilter> grad;
     grad->SetInputData(input);
     grad->SetResultArrayName("Jacobian");
@@ -211,7 +211,7 @@ int vtkBifurcationLine::RequestData(
     vtkDataArray *jacobian =
         gradOut->GetPointData()->GetArray("Jacobian");
 
-    // 3) acceleration = J * v  (multi-threaded)
+    // acceleration = J * v  (multi-threaded)
     vtkNew<vtkDoubleArray> acceleration;
     acceleration->SetName("acceleration");
     acceleration->SetNumberOfComponents(3);
@@ -232,7 +232,7 @@ int vtkBifurcationLine::RequestData(
     }
     gradOut->GetPointData()->AddArray(acceleration);
 
-    // 4) build accepted-points mask (multi-threaded)
+    // build accepted-points mask (multi-threaded)
     vtkNew<vtkCharArray> acceptedPoints;
     acceptedPoints->SetName("acceptedPoints");
     acceptedPoints->SetNumberOfTuples(nt);
@@ -244,7 +244,7 @@ int vtkBifurcationLine::RequestData(
                                this);
     vtkSMPTools::For(0, nt, maskFun);
 
-    // 5) run parallel-vectors
+    // run parallel-vectors
     vtkNew<vtkParallelVectorsForBifurcationLine> pv;
     pv->SetInputData(gradOut);
     pv->SetJacobian(jacobian);
@@ -258,7 +258,7 @@ int vtkBifurcationLine::RequestData(
     vtkNew<vtkPoints> newPoints;
     vtkNew<vtkCellArray> newLines;
 
-    // we'll need to copy point‐data arrays too:
+    // we'll need to copy point‐data arrays
     filtered->GetPointData()->ShallowCopy(raw->GetPointData());
 
     std::unordered_map<vtkIdType, vtkIdType> pointMap;
@@ -271,13 +271,13 @@ int vtkBifurcationLine::RequestData(
     raw->GetLines()->InitTraversal();
     while (raw->GetLines()->GetNextCell(npts, pts))
     {
-        // 1) length filter (#cells = npts-1)
+        // length filter (#cells = npts-1)
         if (this->EnableLengthFilter && (npts - 1) < this->MinimumCells)
         {
             continue;
         }
 
-        // 2) angle‐turn filter
+        // angle‐turn filter
         bool badTurn = false;
         if (this->EnableAngleFilter && npts >= 3)
         {
@@ -305,7 +305,7 @@ int vtkBifurcationLine::RequestData(
             continue;
         }
 
-        // 3) accept this line → remap its points
+        // accept this line → remap its points
         std::vector<vtkIdType> newIds(npts);
         for (vtkIdType j = 0; j < npts; ++j)
         {
@@ -331,7 +331,7 @@ int vtkBifurcationLine::RequestData(
     // finally shallow‐copy any remaining cell‐data arrays
     filtered->GetCellData()->ShallowCopy(raw->GetCellData());
 
-    // 7) hand it back
+    // hand it back
     vtkPolyData *outPd = vtkPolyData::GetData(outVec, 0);
     outPd->ShallowCopy(filtered);
     return 1;

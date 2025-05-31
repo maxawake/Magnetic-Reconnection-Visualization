@@ -4,7 +4,6 @@ from typing import Tuple, List
 
 import numpy as np
 
-# ParaView / VTK imports ------------------------------------------------------
 import paraview.simple as pv
 from paraview.util.vtkAlgorithm import (
     VTKPythonAlgorithmBase,
@@ -14,11 +13,15 @@ from paraview.util.vtkAlgorithm import (
 )
 from vtkmodules.vtkCommonDataModel import vtkDataObject, vtkDataSet, vtkPolyData, vtkImageData
 from vtkmodules.vtkCommonCore import vtkPoints, VTK_FLOAT
-from vtkmodules.vtkFiltersCore import vtkProbeFilter
+from vtkmodules.vtkFiltersCore import vtkProbeFilter, vtkResampleWithDataSet
+from vtkmodules.vtkFiltersGeneral import vtkWarpVector
+from vtkmodules.util import numpy_support
 from vtkmodules.numpy_interface import dataset_adapter as dsa
-from vtkmodules.numpy_interface import numpy_support
 from vtkmodules.numpy_interface.algorithms import norm
 from vtkmodules.numpy_interface import algorithms as alg
+from vtkmodules.vtkFiltersSources import vtkPolyLineSource
+from vtkmodules.vtkCommonDataModel import vtkStaticCellLocator
+from vtkmodules.vtkIOXML import vtkXMLImageDataReader
 from vtkmodules.vtkFiltersGeneral import vtkGradientFilter
 
 plugin_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -26,259 +29,209 @@ src_path = os.path.join(plugin_root, "src")
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
-# decorator helper that adds ParaView dropdowns for array selection
 from mrvis.plugins.decorators import smproperty_inputarray
 
+from prtl.vtk.prtlVectorFieldDerivatives import prtlVectorFieldDerivatives
 
-MU0 = 4.0 * np.pi * 1e-7  # vacuum permeability (SI)
-DELTA_DEFAULT = 5.0  # default displacement |δ| [simulation units]
+MU0 = 4 * np.pi * 1e-7  # Permeability of free space in T*m/A
+DELTA_DEFAULT = 1.0
 
 
 @smproxy.filter(label="MRVIS Reconnection Rate")
-@smproperty.input(name="Input2", port_index=1)
-@smdomain.datatype(dataTypes=["vtkDataSet"])
-@smproperty.input(name="Input1", port_index=0)
-@smdomain.datatype(dataTypes=["vtkDataSet"])
+@smproperty.input(name="XLine", port_index=1)
+@smdomain.datatype(dataTypes=["vtkPolyData"])
+@smproperty.input(name="Grid", port_index=0)
+@smdomain.datatype(dataTypes=["vtkImageData"])
 class mrvisReconnectionRate(VTKPythonAlgorithmBase):
     def __init__(self):
-        VTKPythonAlgorithmBase.__init__(self, nInputPorts=2, nOutputPorts=2, outputType="vtkPolyData")
-        self._array_field = [0] * 4
-        self._array_name = [None] * 4
+        super().__init__(nInputPorts=2, nOutputPorts=1, outputType="vtkPolyData")
+        self._array_B = None
+        self._array_E = None
+        self._array_rho = None
         self._delta = DELTA_DEFAULT
 
-    @smproperty_inputarray("Magnetic Field", idx=0, input_name="Input1", attribute_type="Vectors")
-    def SetInputArrayToProcessA(self, idx, port, connection, field, name):
-        self._array_field[0] = field
-        self._array_name[0] = name
+    @smproperty_inputarray("MagneticField", idx=0, input_name="Grid", attribute_type="Vectors")
+    def SetMagneticFieldArray(self, idx, port, connection, field, name):
+        self._array_B = name
         self.Modified()
 
-    @smproperty_inputarray("Electric Field", idx=1, input_name="Input1", attribute_type="Vectors")
-    def SetInputArrayToProcessC(self, idx, port, connection, field, name):
-        self._array_field[1] = field
-        self._array_name[1] = name
+    @smproperty_inputarray("ElectricField", idx=1, input_name="Grid", attribute_type="Vectors")
+    def SetElectricFieldArray(self, idx, port, connection, field, name):
+        self._array_E = name
         self.Modified()
 
-    @smproperty_inputarray("Density", idx=2, input_name="Input1", attribute_type="Scalars")
-    def SetInputArrayToProcessD(self, idx, port, connection, field, name):
-        self._array_field[2] = field
-        self._array_name[2] = name
+    @smproperty_inputarray("Density", idx=2, input_name="Grid", attribute_type="Scalars")
+    def SetDensityArray(self, idx, port, connection, field, name):
+        self._array_rho = name
         self.Modified()
 
-    @smproperty_inputarray("Eigenvector", idx=3, input_name="Input1", attribute_type="Vectors")
-    def SetInputArrayToProcessE(self, idx, port, connection, field, name):
-        self._array_field[3] = field
-        self._array_name[3] = name
-        self.Modified()
-
-    # --- SHIFT DISTANCE δ -----------------------------------------------
     @smproperty.doublevector(name="Delta", default_values=DELTA_DEFAULT)
     def SetDelta(self, value):
         self._delta = float(value)
         self.Modified()
 
-    # --------------------------------------------------------------------
-    #  Ensure we always create a vtkPolyData output, even if the user has
-    #  not yet connected both inputs. Prevents REQUEST_DATA_OBJECT errors.
-    # --------------------------------------------------------------------
     def RequestDataObject(self, request, inInfo, outInfo):
-        inp_pd = vtkPolyData.GetData(inInfo[1], 0)
-        if inp_pd:
-            template = inp_pd.NewInstance()
+        inp = vtkPolyData.GetData(inInfo[1], 0)
+        if inp:
+            out_pd = inp.NewInstance()
         else:
-            template = vtkPolyData()
-        outInfo.GetInformationObject(0).Set(vtkDataObject.DATA_OBJECT(), template)
+            out_pd = vtkPolyData()
+        outInfo.GetInformationObject(0).Set(vtkDataObject.DATA_OBJECT(), out_pd)
         return 1
 
-    # --------------------------------------------------------------------
-    #  Main computation: probe grid fields, compute n_hat from eigenvectors,
-    #  integrate E along X-line, sample B and rho at ±δ, compute R.
-    # --------------------------------------------------------------------
     def RequestData(self, request, inInfo, outInfo):
-        """
-        1) Interpolate (probe) E, B, rho, and eigenvector from the 3D grid onto
-           the exact X-line points (one vtkProbeFilter call).
-        2) Integrate E·t_hat along the X-line.
-        3) Form ±δ offsets along the interpolated eigenvector (n_hat),
-           then probe B and rho at those offset points.
-        4) Compute B_in and rho_in, form V_A and the final R, and write
-           it into FieldData on the output poly‐line.
-        """
-
-        # ---------------------------------------------
-        #  Step 0: grab the two inputs from inInfo[]
-        #   - grid_vtk  = 3D point‐mesh (vtkImageData) holding E,B,rho,eigenvector
-        #   - xline_vtk = vtkPolyData of your X‐line points (XYZ coords only)
-        # ---------------------------------------------
-        grid_vtk = vtkImageData.GetData(inInfo[0], 0)  # port‐0
-        xline_vtk = vtkPolyData.GetData(inInfo[1], 0)  # port‐1
-
-        # If either input is missing, bail out gracefully
+        grid_vtk = vtkImageData.GetData(inInfo[0], 0)
+        xline_vtk = vtkPolyData.GetData(inInfo[1], 0)
         if grid_vtk is None or xline_vtk is None:
             return 1
 
-        # Wrap them so we can call xline.Points (NumPy array) and grid.PointData[key]
-        grid = dsa.WrapDataObject(grid_vtk)
-        xline = dsa.WrapDataObject(xline_vtk)
-
-        # The four array‐names chosen via drop‐downs on the GUI:
-        arrB_name = self._array_name[0]  # e.g. "B"
-        arrE_name = self._array_name[1]  # e.g. "E"
-        arrRho_name = self._array_name[2]  # e.g. "rho_Ion"
-        arrEig_name = self._array_name[3]  # e.g. "RealEigenvectorMajor"
-
-        # Make sure the user has actually selected all four arrays
-        if not arrB_name or not arrE_name or not arrRho_name or not arrEig_name:
-            print("Please select B, E, rho, and Eigenvector arrays on the grid.")
+        if not (self._array_B and self._array_E and self._array_rho):
+            print("Please select MagneticField, ElectricField, and Density arrays.")
             return 0
 
-        # ---------------------------------------------
-        #  Step 1: Build a vtkPolyData of only the X-line points (no arrays yet)
-        # ---------------------------------------------
-        pts = xline.Points.copy()  # shape = (N, 3)
+        xline = dsa.WrapDataObject(xline_vtk)
+        pts = xline.Points.copy()
         N = pts.shape[0]
         if N < 2:
             print("X-line must have at least two points.")
             return 0
 
-        # Flatten the (N,3) float32 array to 1D, then convert to vtkDataArray
-        flat_xyz = pts.astype(np.float32).ravel()
-        vtk_xyz = numpy_support.numpy_to_vtk(num_array=flat_xyz, deep=True, array_type=VTK_FLOAT)
-        vtk_xyz.SetNumberOfComponents(3)
-        tmp_pts = vtkPoints()
-        tmp_pts.SetData(vtk_xyz)
+        PRTLVectorFieldDerivatives1 = prtlVectorFieldDerivatives()
+        PRTLVectorFieldDerivatives1.SetComputeAcceleration(False)
+        PRTLVectorFieldDerivatives1.SetComputeEigenDecomposition(True)
+        PRTLVectorFieldDerivatives1.SetComputeFeatureFlowField(False)
+        PRTLVectorFieldDerivatives1.SetComputeStrainEigenDecomposition(False)
+        PRTLVectorFieldDerivatives1.SetInputData(grid_vtk)
+        PRTLVectorFieldDerivatives1.SetLeastSquaresDerivatives(False)
+        PRTLVectorFieldDerivatives1.SetLeastSquaresRadius(2)
+        PRTLVectorFieldDerivatives1.SetOutputDoublePrecision(True)
+        PRTLVectorFieldDerivatives1.SetOutputStrainTensor(False)
+        PRTLVectorFieldDerivatives1.SetOutputStructuredGrid(False)
+        PRTLVectorFieldDerivatives1.SetInputArrayToProcess(0, 0, 0, 0, self._array_B)
+        PRTLVectorFieldDerivatives1.Update()
 
-        tmp_pd = vtkPolyData()
-        tmp_pd.SetPoints(tmp_pts)
-        # At this point tmp_pd has vertices = {xline coords}, but no point‐data arrays.
+        resamp1 = vtkResampleWithDataSet()
+        resamp1.SetSourceData(PRTLVectorFieldDerivatives1.GetOutput())
+        locator1 = vtkStaticCellLocator()
+        resamp1.SetCellLocatorPrototype(locator1)
+        resamp1.SetInputData(xline_vtk)
+        resamp1.SetCategoricalData(False)
+        resamp1.SetComputeTolerance(True)
+        resamp1.SetMarkBlankPointsAndCells(False)
+        resamp1.SetPassFieldArrays(True)
+        resamp1.SetPassPointArrays(False)
+        resamp1.SetPassCellArrays(False)
+        resamp1.SetSnapToCellWithClosestPoint(False)
+        resamp1.Update()
 
-        # ---------------------------------------------
-        #  Step 2: Single vtkProbeFilter to interpolate all 4 arrays onto tmp_pd
-        #     We request E, B, rho, and the eigenvector.
-        # ---------------------------------------------
-        probeAll = vtkProbeFilter()
-        probeAll.SetInputData(tmp_pd)
-        probeAll.SetSourceData(grid_vtk)
-        # We call SetInputArrayToProcess four times (once per array)
-        probeAll.SetInputArrayToProcess(0, 0, 0, vtkDataSet.FIELD_ASSOCIATION_POINTS, arrE_name)
-        probeAll.SetInputArrayToProcess(1, 0, 0, vtkDataSet.FIELD_ASSOCIATION_POINTS, arrB_name)
-        probeAll.SetInputArrayToProcess(2, 0, 0, vtkDataSet.FIELD_ASSOCIATION_POINTS, arrRho_name)
-        probeAll.SetInputArrayToProcess(3, 0, 0, vtkDataSet.FIELD_ASSOCIATION_POINTS, arrEig_name)
-        probeAll.Update()
-
-        # Now probeAll.GetOutput() is a vtkPolyData whose .Points == xline coords, AND
-        # whose PointData contains exactly four new arrays:
-        #    - arrE_name (E_interp), arrB_name (B_interp),
-        #    - arrRho_name (rho_interp), arrEig_name (eig_interp).
-        probed = dsa.WrapDataObject(probeAll.GetOutput()).PointData
-
-        # Grab them as NumPy arrays of shape (N,3) or (N,)
-        if arrE_name not in probed.keys():
-            print(f"Electric field '{arrE_name}' not found on grid (probe failed).")
+        pd1 = dsa.WrapDataObject(resamp1.GetOutput()).PointData
+        eig_name = "RealEigenvectorMajor"
+        if eig_name not in pd1.keys():
+            print(f"Eigenvector '{eig_name}' not found after resampling.")
             return 0
-        e_vec = probed[arrE_name]  # (N,3)
+        eig_line = pd1[eig_name]
 
-        if arrB_name not in probed.keys():
-            print(f"Magnetic field '{arrB_name}' not found on grid (probe failed).")
-            return 0
-        B_line = probed[arrB_name]  # (N,3)
-
-        if arrRho_name not in probed.keys():
-            print(f"Density '{arrRho_name}' not found on grid (probe failed).")
-            return 0
-        rho_line = probed[arrRho_name]  # (N,)
-
-        if arrEig_name not in probed.keys():
-            print(f"Eigenvector '{arrEig_name}' not found on grid (probe failed).")
-            return 0
-        eig_line = probed[arrEig_name]  # (N,3)
-
-        # ---------------------------------------------
-        #  Step 3: Normalize the interpolated eigenvector → n_hat
-        # ---------------------------------------------
-        n_hat = eig_line.copy()
-        norms = np.linalg.norm(n_hat, axis=1, keepdims=True)
+        norms = np.linalg.norm(eig_line, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
-        n_hat = n_hat / norms  # shape = (N,3)
+        n_hat = eig_line / norms
 
-        # ---------------------------------------------
-        #  Step 4: Integrate E · t_hat along the X-line
-        #    We already have e_vec(i) for each point i.
-        # ---------------------------------------------
-        seg_v = pts[1:] - pts[:-1]  # (N-1, 3)
-        seg_l = norm(seg_v)  # (N-1,)
-        t_hat = seg_v / seg_l[:, None]  # (N-1, 3)
-        e_mid = 0.5 * (e_vec[:-1] + e_vec[1:])  # (N-1, 3)
-        e_comp = alg.sum(e_mid * t_hat, axis=1)  # (N-1,)
-        phi = np.sum(e_comp * seg_l)  # scalar integral ∫ E·dl
+        flat_norm = n_hat.astype(np.float32).ravel()
+        vtk_norm = numpy_support.numpy_to_vtk(num_array=flat_norm, deep=True, array_type=VTK_FLOAT)
+        vtk_norm.SetNumberOfComponents(3)
+        vtk_norm.SetName(eig_name)
+        xline_vtk.GetPointData().AddArray(vtk_norm)
+        xline_vtk.GetPointData().SetActiveVectors(eig_name)
+
+        delta = self._delta
+
+        warp_plus = vtkWarpVector()
+        warp_plus.SetInputData(xline_vtk)
+        warp_plus.SetScaleFactor(delta)
+        warp_plus.SetInputArrayToProcess(0, 0, 0, vtkDataSet.FIELD_ASSOCIATION_POINTS, eig_name)
+        warp_plus.Update()
+        xline_plus = warp_plus.GetOutput()
+
+        warp_minus = vtkWarpVector()
+        warp_minus.SetInputData(xline_vtk)
+        warp_minus.SetScaleFactor(-delta)
+        warp_minus.SetInputArrayToProcess(0, 0, 0, vtkDataSet.FIELD_ASSOCIATION_POINTS, eig_name)
+        warp_minus.Update()
+        xline_minus = warp_minus.GetOutput()
+
+        resampE = vtkResampleWithDataSet()
+        resampE.SetSourceData(grid_vtk)
+        locatorE = vtkStaticCellLocator()
+        resampE.SetCellLocatorPrototype(locatorE)
+        resampE.SetInputData(xline_vtk)
+        resampE.SetCategoricalData(False)
+        resampE.SetComputeTolerance(True)
+        resampE.SetMarkBlankPointsAndCells(False)
+        resampE.SetPassFieldArrays(True)
+        resampE.SetPassPointArrays(True)
+        resampE.SetPassCellArrays(False)
+        resampE.SetSnapToCellWithClosestPoint(False)
+        resampE.Update()
+
+        pdE = dsa.WrapDataObject(resampE.GetOutput()).PointData
+        if not (self._array_E in pdE.keys() and self._array_B in pdE.keys() and self._array_rho in pdE.keys()):
+            print("Failed to resample B/E/rho onto X-line.")
+            return 0
+
+        e_line = pdE[self._array_E]
+        b_line = pdE[self._array_B]
+
+        f_vals = alg.sum(e_line * b_line, axis=1)
+
+        seg_v = pts[1:] - pts[:-1]
+        seg_l = norm(seg_v)
+
+        f_mid = 0.5 * (f_vals[:-1] + f_vals[1:])
+        phi = np.sum(f_mid * seg_l)
         L = np.sum(seg_l)
         if L == 0:
             print("Zero-length X-line.")
             return 0
-        e_bar = phi / L  # mean E over the length
+        mean_EdotB = phi / L
 
-        # ---------------------------------------------
-        #  Step 5: Form ±δ offsets along n_hat, then probe B & rho there
-        # ---------------------------------------------
-        delta = getattr(self, "_delta", DELTA_DEFAULT)
-        p_plus = pts + delta * n_hat  # (N,3)
-        p_minus = pts - delta * n_hat  # (N,3)
+        def resample_BR(poly: vtkPolyData) -> Tuple[np.ndarray, np.ndarray]:
+            r = vtkResampleWithDataSet()
+            r.SetSourceData(grid_vtk)
+            loc = vtkStaticCellLocator()
+            r.SetCellLocatorPrototype(loc)
+            r.SetInputData(poly)
+            r.SetCategoricalData(False)
+            r.SetComputeTolerance(True)
+            r.SetMarkBlankPointsAndCells(False)
+            r.SetPassFieldArrays(True)
+            r.SetPassPointArrays(True)
+            r.SetPassCellArrays(False)
+            r.SetSnapToCellWithClosestPoint(False)
+            r.Update()
 
-        # A small helper that probes exactly arrB_name & arrRho_name at an Nx3 array of points
-        def probe_BR(coords: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-            flat = coords.astype(np.float32).ravel()
-            vtk_arr = numpy_support.numpy_to_vtk(num_array=flat, deep=True, array_type=VTK_FLOAT)
-            vtk_arr.SetNumberOfComponents(3)
-            pts_obj = vtkPoints()
-            pts_obj.SetData(vtk_arr)
-            pd_pts = vtkPolyData()
-            pd_pts.SetPoints(pts_obj)
+            pd2 = dsa.WrapDataObject(r.GetOutput()).PointData
+            if self._array_B not in pd2.keys() or self._array_rho not in pd2.keys():
+                print("Failed to resample B/rho at offset.")
+                return None, None
+            Bvals = pd2[self._array_B]
+            rho_vals = pd2[self._array_rho]
+            return Bvals, rho_vals
 
-            # Probe B
-            prB = vtkProbeFilter()
-            prB.SetInputData(pd_pts)
-            prB.SetSourceData(grid_vtk)
-            prB.SetInputArrayToProcess(0, 0, 0, vtkDataSet.FIELD_ASSOCIATION_POINTS, arrB_name)
-            prB.Update()
-            pdB = dsa.WrapDataObject(prB.GetOutput()).PointData
-            Bvals = pdB[arrB_name]  # shape (N,3)
-
-            # Probe rho
-            prR = vtkProbeFilter()
-            prR.SetInputData(pd_pts)
-            prR.SetSourceData(grid_vtk)
-            prR.SetInputArrayToProcess(0, 0, 0, vtkDataSet.FIELD_ASSOCIATION_POINTS, arrRho_name)
-            prR.Update()
-            pdR = dsa.WrapDataObject(prR.GetOutput()).PointData
-            Rvals = pdR[arrRho_name]  # shape (N,)
-
-            return Bvals, Rvals
-
-        Bp, rp = probe_BR(p_plus)
-        Bm, rm = probe_BR(p_minus)
-
-        mask_p = np.isfinite(rp)
-        mask_m = np.isfinite(rm)
-        if not mask_p.any() or not mask_m.any():
-            print("Probed points outside grid – adjust Delta.")
+        Bp, rp = resample_BR(xline_plus)
+        Bm, rm = resample_BR(xline_minus)
+        if Bp is None or Bm is None:
             return 0
 
-        Bmag_p = np.linalg.norm(Bp[mask_p], axis=1)  # (n_valid_p,)
-        Bmag_m = np.linalg.norm(Bm[mask_m], axis=1)  # (n_valid_m,)
-        rho_p = rp[mask_p]  # (n_valid_p,)
-        rho_m = rm[mask_m]  # (n_valid_m,)
+        Bmag_p = np.linalg.norm(Bp, axis=1)
+        Bmag_m = np.linalg.norm(Bm, axis=1)
+        rho_p = rp
+        rho_m = rm
 
         B_in = 0.5 * (Bmag_p.mean() + Bmag_m.mean())
         rho_in = 0.5 * (rho_p.mean() + rho_m.mean())
         V_A = B_in / np.sqrt(MU0 * rho_in)
 
-        # ---------------------------------------------
-        #  Step 6: Compute the relative reconnection rate R = e_bar / (B_in V_A)
-        # ---------------------------------------------
-        R = e_bar / (B_in * V_A)
+        R = mean_EdotB / (B_in * V_A)
 
-        # ---------------------------------------------
-        #  Step 7: Write the output poly‐line and attach R to FieldData
-        # ---------------------------------------------
         out_pd = vtkPolyData.GetData(outInfo, 0)
         out_pd.ShallowCopy(xline_vtk)
 

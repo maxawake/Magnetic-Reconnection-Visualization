@@ -10,14 +10,23 @@ from paraview.util.vtkAlgorithm import (
     smproperty,
     smproxy,
 )
+from vtk import vtkIdList
 from vtkmodules.numpy_interface import algorithms as alg
 from vtkmodules.numpy_interface import dataset_adapter as dsa
 from vtkmodules.numpy_interface.algorithms import norm
 from vtkmodules.util import numpy_support
-from vtkmodules.vtkCommonCore import VTK_FLOAT
-from vtkmodules.vtkCommonDataModel import vtkDataObject, vtkDataSet, vtkImageData, vtkPolyData, vtkStaticCellLocator
-from vtkmodules.vtkFiltersCore import vtkResampleWithDataSet
+from vtkmodules.vtkCommonCore import VTK_FLOAT, vtkPoints
+from vtkmodules.vtkCommonDataModel import (
+    vtkDataObject,
+    vtkDataSet,
+    vtkImageData,
+    vtkPolyData,
+    vtkStaticCellLocator,
+    vtkCellArray,
+)
+from vtkmodules.vtkFiltersCore import vtkResampleWithDataSet, vtkCleanPolyData
 from vtkmodules.vtkFiltersGeneral import vtkWarpVector
+
 
 plugin_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 src_path = os.path.join(plugin_root, "src")
@@ -28,8 +37,8 @@ from prtl.vtk.prtlVectorFieldDerivatives import prtlVectorFieldDerivatives
 
 from mrvis.plugins.decorators import smproperty_inputarray
 
-MU0 = 4 * np.pi * 1e-7  # Permeability of free space in T*m/A
 DELTA_DEFAULT = 1.0
+SPEED_OF_LIGHT = 3e10  # cm/s
 
 
 @smproxy.filter(label="MRVIS Reconnection Rate")
@@ -74,79 +83,41 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
         outInfo.GetInformationObject(0).Set(vtkDataObject.DATA_OBJECT(), out_pd)
         return 1
 
-    def RequestData(self, request, inInfo, outInfo):
-        # Get the input data objects
-        grid_vtk = vtkImageData.GetData(inInfo[0], 0)
-        xline_vtk = vtkPolyData.GetData(inInfo[1], 0)
-        if grid_vtk is None or xline_vtk is None:
-            return 1
-
-        if not (self._array_B and self._array_E and self._array_rho):
-            print("Please select MagneticField, ElectricField, and Density arrays.")
-            return 0
-
-        # Check if the input grid is a valid vtkImageData
+    def compute_reconnection_rate_for_line(self, grid_vtk, xline_vtk, derivs) -> Tuple[float, List[int]]:
         xline = dsa.WrapDataObject(xline_vtk)
         pts = xline.Points.copy()
         N = pts.shape[0]
         if N < 2:
-            print("X-line must have at least two points.")
-            return 0
+            print("Warning: Line segment has fewer than 2 points, cannot compute reconnection rate.")
+            return 0.0
 
-        # Calculate the vector field derivatives using PRTL
-        PRTLVectorFieldDerivatives1 = prtlVectorFieldDerivatives()
-        PRTLVectorFieldDerivatives1.SetComputeAcceleration(False)
-        PRTLVectorFieldDerivatives1.SetComputeEigenDecomposition(True)
-        PRTLVectorFieldDerivatives1.SetComputeFeatureFlowField(False)
-        PRTLVectorFieldDerivatives1.SetComputeStrainEigenDecomposition(False)
-        PRTLVectorFieldDerivatives1.SetInputData(grid_vtk)
-        PRTLVectorFieldDerivatives1.SetLeastSquaresDerivatives(False)
-        PRTLVectorFieldDerivatives1.SetLeastSquaresRadius(2)
-        PRTLVectorFieldDerivatives1.SetOutputDoublePrecision(True)
-        PRTLVectorFieldDerivatives1.SetOutputStrainTensor(False)
-        PRTLVectorFieldDerivatives1.SetOutputStructuredGrid(False)
-        PRTLVectorFieldDerivatives1.SetInputArrayToProcess(0, 0, 0, 0, self._array_B)
-        PRTLVectorFieldDerivatives1.Update()
-
-        # Resample the derivatives onto the X-line
         resamp1 = vtkResampleWithDataSet()
-        resamp1.SetSourceData(PRTLVectorFieldDerivatives1.GetOutput())
-        locator1 = vtkStaticCellLocator()
-        resamp1.SetCellLocatorPrototype(locator1)
+        resamp1.SetSourceData(derivs.GetOutput())
+        resamp1.SetCellLocatorPrototype(vtkStaticCellLocator())
         resamp1.SetInputData(xline_vtk)
-        resamp1.SetCategoricalData(False)
-        resamp1.SetComputeTolerance(True)
-        resamp1.SetMarkBlankPointsAndCells(False)
         resamp1.SetPassFieldArrays(True)
         resamp1.SetPassPointArrays(False)
-        resamp1.SetPassCellArrays(False)
-        resamp1.SetSnapToCellWithClosestPoint(False)
+        resamp1.SetCategoricalData(False)
         resamp1.Update()
 
-        # Check if the resampled data contains the eigenvector
         pd1 = dsa.WrapDataObject(resamp1.GetOutput()).PointData
         eig_name = "RealEigenvectorMajor"
         if eig_name not in pd1.keys():
-            print(f"Eigenvector '{eig_name}' not found after resampling.")
-            return 0
-        eig_line = pd1[eig_name]
+            print(f"Warning: Eigenvector '{eig_name}' not found in point data.")
+            return 0.0
 
-        # Normalize the eigenvector
-        norms = np.linalg.norm(eig_line, axis=1, keepdims=True)
-        norms[norms == 0] = 1.0
-        n_hat = eig_line / norms
+        n_hat = pd1[eig_name]
+        norms = np.linalg.norm(n_hat, axis=1, keepdims=True)
+        n_hat /= norms
 
-        # Create a new vtkPolyData for the X-line with the eigenvector as point data
         flat_norm = n_hat.astype(np.float32).ravel()
-        vtk_norm = numpy_support.numpy_to_vtk(num_array=flat_norm, deep=True, array_type=VTK_FLOAT)
+        vtk_norm = numpy_support.numpy_to_vtk(flat_norm, deep=True, array_type=VTK_FLOAT)
         vtk_norm.SetNumberOfComponents(3)
         vtk_norm.SetName(eig_name)
         xline_vtk.GetPointData().AddArray(vtk_norm)
         xline_vtk.GetPointData().SetActiveVectors(eig_name)
 
         delta = self._delta
-
-        # Warp the X-line points in the direction of the eigenvector
         warp_plus = vtkWarpVector()
         warp_plus.SetInputData(xline_vtk)
         warp_plus.SetScaleFactor(delta)
@@ -161,99 +132,161 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
         warp_minus.Update()
         xline_minus = warp_minus.GetOutput()
 
-        # Resample the B/E/rho fields onto the X-line
-        resampE = vtkResampleWithDataSet()
-        resampE.SetSourceData(grid_vtk)
-        locatorE = vtkStaticCellLocator()
-        resampE.SetCellLocatorPrototype(locatorE)
-        resampE.SetInputData(xline_vtk)
-        resampE.SetCategoricalData(False)
-        resampE.SetComputeTolerance(True)
-        resampE.SetMarkBlankPointsAndCells(False)
-        resampE.SetPassFieldArrays(True)
-        resampE.SetPassPointArrays(True)
-        resampE.SetPassCellArrays(False)
-        resampE.SetSnapToCellWithClosestPoint(False)
-        resampE.Update()
+        def resample_fields(poly):
+            resampler = vtkResampleWithDataSet()
+            resampler.SetSourceData(grid_vtk)
+            resampler.SetCellLocatorPrototype(vtkStaticCellLocator())
+            resampler.SetInputData(poly)
+            resampler.SetPassFieldArrays(True)
+            resampler.SetPassPointArrays(True)
+            resampler.SetCategoricalData(False)
+            resampler.Update()
+            return dsa.WrapDataObject(resampler.GetOutput()).PointData
 
-        # Check if the resampled data contains B/E/rho
-        pdE = dsa.WrapDataObject(resampE.GetOutput()).PointData
-        if not (self._array_E in pdE.keys() and self._array_B in pdE.keys() and self._array_rho in pdE.keys()):
-            print("Failed to resample B/E/rho onto X-line.")
-            return 0
+        point_data = resample_fields(xline_vtk)
+        B_line = point_data[self._array_B]
+        E_line = point_data[self._array_E]
+        if B_line is None or E_line is None:
+            Exception("Magnetic or Electric field data is missing.")
 
-        # Resample the B/E/rho fields onto the warped X-lines
-        e_line = pdE[self._array_E]
-        b_line = pdE[self._array_B]
+        # Normalize B
+        Bmag = np.linalg.norm(B_line, axis=1)
+        Bmag[Bmag == 0] = 1.0  # Avoid division by zero
 
-        # Calculate the reconnection rate
-        f_vals = alg.sum(e_line * b_line, axis=1)
+        f_vals = alg.sum(E_line * B_line, axis=1)
+        f_vals /= Bmag
 
-        # Calculate the mean E·B along the X-line
-        seg_v = pts[1:] - pts[:-1]
-        seg_l = norm(seg_v)
-
-        # Calculate the mean E·B along the X-line segments
+        seg_l = norm(pts[1:] - pts[:-1])
         f_mid = 0.5 * (f_vals[:-1] + f_vals[1:])
         phi = np.sum(f_mid * seg_l)
         L = np.sum(seg_l)
         if L == 0:
-            print("Zero-length X-line.")
-            return 0
-        mean_EdotB = phi / L
+            print("Warning: Length of line segment is zero, cannot compute reconnection rate.")
+            return 0.0
 
-        def resample_BR(poly: vtkPolyData) -> Tuple[np.ndarray, np.ndarray]:
-            """Resample the B and rho fields onto the given polydata."""
-            r = vtkResampleWithDataSet()
-            r.SetSourceData(grid_vtk)
-            loc = vtkStaticCellLocator()
-            r.SetCellLocatorPrototype(loc)
-            r.SetInputData(poly)
-            r.SetCategoricalData(False)
-            r.SetComputeTolerance(True)
-            r.SetMarkBlankPointsAndCells(False)
-            r.SetPassFieldArrays(True)
-            r.SetPassPointArrays(True)
-            r.SetPassCellArrays(False)
-            r.SetSnapToCellWithClosestPoint(False)
-            r.Update()
+        mean_EdotB = np.abs(phi / L)
+        point_data_plus = resample_fields(xline_plus)
+        point_data_minus = resample_fields(xline_minus)
+        Bp = point_data_plus[self._array_B]
+        Bm = point_data_minus[self._array_B]
+        rp = point_data_plus[self._array_rho]
+        rm = point_data_minus[self._array_rho]
 
-            pd2 = dsa.WrapDataObject(r.GetOutput()).PointData
-            if self._array_B not in pd2.keys() or self._array_rho not in pd2.keys():
-                print("Failed to resample B/rho at offset.")
-                return None, None
-            Bvals = pd2[self._array_B]
-            rho_vals = pd2[self._array_rho]
-            return Bvals, rho_vals
-
-        # Resample the B and rho fields onto the warped X-lines
-        Bp, rp = resample_BR(xline_plus)
-        Bm, rm = resample_BR(xline_minus)
-        if Bp is None or Bm is None:
-            return 0
+        if Bp is None or Bm is None or rp is None or rm is None:
+            Exception("Magnetic field or density data is missing.")
 
         Bmag_p = np.linalg.norm(Bp, axis=1)
         Bmag_m = np.linalg.norm(Bm, axis=1)
-        rho_p = rp
-        rho_m = rm
-
-        # Calculate the average magnetic field and density
+        rho_in = 0.5 * (rp.mean() + rm.mean())
         B_in = 0.5 * (Bmag_p.mean() + Bmag_m.mean())
-        rho_in = 0.5 * (rho_p.mean() + rho_m.mean())
-        V_A = B_in / np.sqrt(MU0 * rho_in)
+        epsilon = 1e-18  # or choose a value appropriate for your density scale
+        if rho_in < epsilon:
+            print(f"Warning: Density too small ({rho_in:.2e}), clamping to {epsilon}.")
+            rho_in = epsilon
+        V_A = B_in / np.sqrt(4 * np.pi * rho_in)
+        R = mean_EdotB * SPEED_OF_LIGHT / (B_in * V_A)
 
-        # Calculate the reconnection rate
-        R = mean_EdotB / (B_in * V_A)
-
-        # Create the output vtkPolyData
-        out_pd = vtkPolyData.GetData(outInfo, 0)
-        out_pd.ShallowCopy(xline_vtk)
-
-        rate_arr = numpy_support.numpy_to_vtk(
-            num_array=np.asarray([R], dtype=np.float64), deep=True, array_type=VTK_FLOAT
+        print(f"rho_in: {rho_in}, B_in: {B_in}")
+        print("  B mean:", np.mean(B_line, axis=0))
+        print(
+            "  rho plus:",
+            np.mean(point_data_plus[self._array_rho]),
+            "rho minus",
+            np.mean(point_data_minus[self._array_rho]),
         )
-        rate_arr.SetName("RelativeReconnectionRate")
-        out_pd.GetFieldData().AddArray(rate_arr)
+        print("  Bp mean:", np.mean(Bp, axis=0), "Bp norm:", np.linalg.norm(Bp, axis=1).mean())
+        print("  Bm mean:", np.mean(Bm, axis=0), "Bm norm:", np.linalg.norm(Bm, axis=1).mean())
+        print("  E mean:", np.mean(E_line, axis=0))
+        print("  f mean:", np.mean(f_vals), "f mid mean:", np.mean(f_mid))
+        print("  Alfvenic speed V_A:", V_A)
+        print("  Mean E·B:", mean_EdotB)
+        print("  Line segment length L:", L)
+        print("  Warp Δ:", delta)
+        print("  Eigenvector norm stats:", np.min(norms), np.max(norms))
+        print("  Warp Δ min/max:", np.sqrt(np.sum((pts - pts + delta * n_hat) ** 2, axis=1)).min())
+        print("  Reconnection rate R:", R)
 
-        print(f"MRVIS Relative Reconnection Rate:  R = {R:.4e}")
+        return R
+
+    def RequestData(self, request, inInfo, outInfo):
+        grid_vtk = vtkImageData.GetData(inInfo[0], 0)
+        xlines_all = vtkPolyData.GetData(inInfo[1], 0)
+        out_pd = vtkPolyData.GetData(outInfo, 0)
+        out_pd.ShallowCopy(xlines_all)
+        pts = dsa.WrapDataObject(xlines_all).Points
+        print("Point extent:", np.min(pts, axis=0), "to", np.max(pts, axis=0))
+
+        # create a new vtkCleanPolyData
+        # Clean1 = vtkCleanPolyData()
+        # Clean1.SetAbsoluteTolerance(1.0)
+        # Clean1.SetConvertLinesToPoints(True)
+        # Clean1.SetConvertPolysToLines(True)
+        # Clean1.SetConvertStripsToPolys(True)
+        # Clean1.SetInputData(xlines_all)
+        # Clean1.SetPieceInvariant(True)
+        # Clean1.SetPointMerging(True)
+        # Clean1.SetTolerance(0.0)
+        # Clean1.SetToleranceIsAbsolute(False)
+        # Clean1.Update()
+        # xlines_all = Clean1.GetOutput()
+
+        derivs = prtlVectorFieldDerivatives()
+        derivs.SetComputeAcceleration(False)
+        derivs.SetComputeEigenDecomposition(True)
+        derivs.SetComputeFeatureFlowField(False)
+        derivs.SetComputeStrainEigenDecomposition(False)
+        derivs.SetInputData(grid_vtk)
+        derivs.SetLeastSquaresDerivatives(False)
+        derivs.SetLeastSquaresRadius(2)
+        derivs.SetOutputDoublePrecision(True)
+        derivs.SetOutputStrainTensor(False)
+        derivs.SetOutputStructuredGrid(False)
+        derivs.SetInputArrayToProcess(0, 0, 0, 0, self._array_B)
+        derivs.Update()
+
+        if not all([grid_vtk, xlines_all]):
+            return 1
+        if not all([self._array_B, self._array_E, self._array_rho]):
+            print("Missing array selection.")
+            return 0
+
+        num_cells = xlines_all.GetNumberOfCells()
+        rates = np.full(xlines_all.GetNumberOfPoints(), 0.0)
+
+        for cell_id in range(num_cells):
+            id_list = vtkIdList()
+            xlines_all.GetCellPoints(cell_id, id_list)
+            point_ids = [id_list.GetId(i) for i in range(id_list.GetNumberOfIds())]
+
+            if len(point_ids) < 2:
+                continue
+
+            # Reconstruct line segment as new vtkPolyData
+            subline_pts = [xlines_all.GetPoint(pid) for pid in point_ids]
+            points = vtkPoints()
+            for pt in subline_pts:
+                points.InsertNextPoint(pt)
+
+            lines = vtkCellArray()
+            lines.InsertNextCell(len(point_ids))
+            for i in range(len(point_ids)):
+                lines.InsertCellPoint(i)
+
+            subline_vtk = vtkPolyData()
+            subline_vtk.SetPoints(points)
+            subline_vtk.SetLines(lines)
+
+            R = self.compute_reconnection_rate_for_line(grid_vtk, subline_vtk, derivs)
+            print(f"Computed reconnection rate for cell {cell_id}: {R}")
+            if np.isnan(R) or np.isinf(R) or R < 0:
+                print(f"Warning: Reconnection rate for cell {cell_id} is NaN, skipping.")
+                R = 0.0
+
+            for pid in point_ids:
+                rates[pid] = R
+            print("\n")
+
+        rate_array = numpy_support.numpy_to_vtk(rates, deep=True, array_type=VTK_FLOAT)
+        rate_array.SetName("ReconnectionRate")
+        out_pd.GetPointData().AddArray(rate_array)
         return 1

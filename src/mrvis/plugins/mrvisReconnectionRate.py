@@ -1,37 +1,32 @@
 import os
 import sys
-from typing import Tuple, List
+from typing import List, Tuple
 
 import numpy as np
-
 import paraview.simple as pv
 from paraview.util.vtkAlgorithm import (
     VTKPythonAlgorithmBase,
-    smproxy,
-    smproperty,
     smdomain,
+    smproperty,
+    smproxy,
 )
-from vtkmodules.vtkCommonDataModel import vtkDataObject, vtkDataSet, vtkPolyData, vtkImageData
-from vtkmodules.vtkCommonCore import vtkPoints, VTK_FLOAT
-from vtkmodules.vtkFiltersCore import vtkProbeFilter, vtkResampleWithDataSet
-from vtkmodules.vtkFiltersGeneral import vtkWarpVector
-from vtkmodules.util import numpy_support
+from vtkmodules.numpy_interface import algorithms as alg
 from vtkmodules.numpy_interface import dataset_adapter as dsa
 from vtkmodules.numpy_interface.algorithms import norm
-from vtkmodules.numpy_interface import algorithms as alg
-from vtkmodules.vtkFiltersSources import vtkPolyLineSource
-from vtkmodules.vtkCommonDataModel import vtkStaticCellLocator
-from vtkmodules.vtkIOXML import vtkXMLImageDataReader
-from vtkmodules.vtkFiltersGeneral import vtkGradientFilter
+from vtkmodules.util import numpy_support
+from vtkmodules.vtkCommonCore import VTK_FLOAT
+from vtkmodules.vtkCommonDataModel import vtkDataObject, vtkDataSet, vtkImageData, vtkPolyData, vtkStaticCellLocator
+from vtkmodules.vtkFiltersCore import vtkResampleWithDataSet
+from vtkmodules.vtkFiltersGeneral import vtkWarpVector
 
 plugin_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 src_path = os.path.join(plugin_root, "src")
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
-from mrvis.plugins.decorators import smproperty_inputarray
-
 from prtl.vtk.prtlVectorFieldDerivatives import prtlVectorFieldDerivatives
+
+from mrvis.plugins.decorators import smproperty_inputarray
 
 MU0 = 4 * np.pi * 1e-7  # Permeability of free space in T*m/A
 DELTA_DEFAULT = 1.0

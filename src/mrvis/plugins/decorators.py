@@ -1,5 +1,5 @@
 import paraview.detail.pythonalgorithm as pvdetail
-from paraview.util.vtkAlgorithm import smproperty
+from paraview.util.vtkAlgorithm import smdomain, smproperty
 
 
 def smproperty_inputarray(
@@ -47,3 +47,33 @@ def smproperty_inputarray(
     return pvdetail._create_decorator(
         attrs, update_func=smproperty._update_property_defaults, generate_xml_func=generate
     )
+
+
+def smdomain_enumeration(labels, values, **kwargs):
+    attrs = {"type": "EnumerationDomain", "name": "enum"}
+    attrs.update(kwargs)
+
+    def generate(func, attrs):
+        type_xmls = []
+        for text, value in zip(labels, values):
+            type_xmls.append(pvdetail._generate_xml({"type": "Entry", "text": text, "value": value}, []))
+        smdomain._append_xml(func, pvdetail._generate_xml(attrs, type_xmls))
+
+    return pvdetail._create_decorator(attrs, generate_xml_func=generate)
+
+
+def smdomain_boolean(**kwargs):
+    attrs = {"type": "BooleanDomain", "name": "bool"}
+    attrs.update(kwargs)
+    return pvdetail._create_decorator(attrs, generate_xml_func=smdomain._generate_xml)
+
+
+def smdomain_inputarray(name="input_array", attribute_type="any", **kwargs):
+    attrs = {"type": "InputArrayDomain", "name": name, "attribute_type": attribute_type}
+    attrs.update(kwargs)
+    return pvdetail._create_decorator(attrs, generate_xml_func=smdomain._generate_xml)
+
+
+smdomain.enumeration = staticmethod(smdomain_enumeration)
+smdomain.boolean = staticmethod(smdomain_boolean)
+smdomain.inputarray = staticmethod(smdomain_inputarray)

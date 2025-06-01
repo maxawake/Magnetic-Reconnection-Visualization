@@ -35,7 +35,7 @@ if src_path not in sys.path:
 
 from prtl.vtk.prtlVectorFieldDerivatives import prtlVectorFieldDerivatives
 
-from mrvis.plugins.decorators import smproperty_inputarray
+from mrvis.plugins.decorators import smproperty_inputarray, smdomain_boolean
 
 DELTA_DEFAULT = 1.0
 SPEED_OF_LIGHT = 3e10  # cm/s
@@ -70,8 +70,15 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
         self.Modified()
 
     @smproperty.doublevector(name="Delta", default_values=DELTA_DEFAULT)
+    @smdomain.doublerange(min=0.0, max=10.0, step=0.1)
     def SetDelta(self, value):
         self._delta = float(value)
+        self.Modified()
+
+    @smproperty.intvector(name="CleanInput", label="Clean Input", default_values=0)
+    @smdomain_boolean()
+    def SetCleanInput(self, value):
+        self._clean_input = value
         self.Modified()
 
     def RequestDataObject(self, request, inInfo, outInfo):
@@ -216,19 +223,20 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
         pts = dsa.WrapDataObject(xlines_all).Points
         print("Point extent:", np.min(pts, axis=0), "to", np.max(pts, axis=0))
 
-        # create a new vtkCleanPolyData
-        # Clean1 = vtkCleanPolyData()
-        # Clean1.SetAbsoluteTolerance(1.0)
-        # Clean1.SetConvertLinesToPoints(True)
-        # Clean1.SetConvertPolysToLines(True)
-        # Clean1.SetConvertStripsToPolys(True)
-        # Clean1.SetInputData(xlines_all)
-        # Clean1.SetPieceInvariant(True)
-        # Clean1.SetPointMerging(True)
-        # Clean1.SetTolerance(0.0)
-        # Clean1.SetToleranceIsAbsolute(False)
-        # Clean1.Update()
-        # xlines_all = Clean1.GetOutput()
+        if self._clean_input:
+            # create a new vtkCleanPolyData
+            Clean1 = vtkCleanPolyData()
+            Clean1.SetAbsoluteTolerance(1.0)
+            Clean1.SetConvertLinesToPoints(True)
+            Clean1.SetConvertPolysToLines(True)
+            Clean1.SetConvertStripsToPolys(True)
+            Clean1.SetInputData(xlines_all)
+            Clean1.SetPieceInvariant(True)
+            Clean1.SetPointMerging(True)
+            Clean1.SetTolerance(0.0)
+            Clean1.SetToleranceIsAbsolute(False)
+            Clean1.Update()
+            xlines_all = Clean1.GetOutput()
 
         derivs = prtlVectorFieldDerivatives()
         derivs.SetComputeAcceleration(False)

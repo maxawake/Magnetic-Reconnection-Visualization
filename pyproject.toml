@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "cmasher>=1.9.2",
     "findiff>=0.12.1",
     "h5py>=3.13.0",
     "ipykernel>=6.29.5",

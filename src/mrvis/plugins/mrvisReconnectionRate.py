@@ -1,6 +1,7 @@
 import os
 import sys
 from typing import List, Tuple
+import tqdm
 
 import numpy as np
 import paraview.simple as pv
@@ -52,7 +53,11 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
         self._array_B = None
         self._array_E = None
         self._array_rho = None
+        self._clean_input = 0
+        self._verbose = 0
         self._delta = DELTA_DEFAULT
+        self._save = 0
+        self._save_path = "./"
 
     @smproperty_inputarray("MagneticField", idx=0, input_name="Grid", attribute_type="Vectors")
     def SetMagneticFieldArray(self, idx, port, connection, field, name):
@@ -81,6 +86,25 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
         self._clean_input = value
         self.Modified()
 
+    @smproperty.intvector(name="Verbose", label="Verbose", default_values=0)
+    @smdomain_boolean()
+    def SetVerbose(self, value):
+        self._verbose = value
+        self.Modified()
+
+    @smproperty.intvector(name="SaveResults", label="Save Results", default_values=0)
+    @smdomain_boolean()
+    def SetSaveResult(self, value):
+        """Set the save path for reconnection rates."""
+        self._save = value
+        self.Modified()
+
+    @smproperty.stringvector(name="SavePath", label="Save Path")
+    def SetSavePath(self, path):
+        """Set the save path for reconnection rates."""
+        self._save_path = path
+        self.Modified()
+
     def RequestDataObject(self, request, inInfo, outInfo):
         inp = vtkPolyData.GetData(inInfo[1], 0)
         if inp:
@@ -95,7 +119,8 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
         pts = xline.Points.copy()
         N = pts.shape[0]
         if N < 2:
-            print("Warning: Line segment has fewer than 2 points, cannot compute reconnection rate.")
+            if self._verbose:
+                print("Warning: Line segment has fewer than 2 points, cannot compute reconnection rate.")
             return 0.0
 
         resamp1 = vtkResampleWithDataSet()
@@ -110,7 +135,8 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
         pd1 = dsa.WrapDataObject(resamp1.GetOutput()).PointData
         eig_name = "RealEigenvectorMajor"
         if eig_name not in pd1.keys():
-            print(f"Warning: Eigenvector '{eig_name}' not found in point data.")
+            if self._verbose:
+                print(f"Warning: Eigenvector '{eig_name}' not found in point data.")
             return 0.0
 
         n_hat = pd1[eig_name]
@@ -168,7 +194,8 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
         phi = np.sum(f_mid * seg_l)
         L = np.sum(seg_l)
         if L == 0:
-            print("Warning: Length of line segment is zero, cannot compute reconnection rate.")
+            if self._verbose:
+                print("Warning: Length of line segment is zero, cannot compute reconnection rate.")
             return 0.0
 
         mean_EdotB = np.abs(phi / L)
@@ -184,34 +211,36 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
 
         Bmag_p = np.linalg.norm(Bp, axis=1)
         Bmag_m = np.linalg.norm(Bm, axis=1)
-        rho_in = 0.5 * (rp.mean() + rm.mean())
-        B_in = 0.5 * (Bmag_p.mean() + Bmag_m.mean())
+        rho_in = 0.5 * (np.mean(rp) + np.mean(rm))
+        B_in = 0.5 * (np.mean(Bmag_p) + np.mean(Bmag_m))
         epsilon = 1e-18  # or choose a value appropriate for your density scale
         if rho_in < epsilon:
-            print(f"Warning: Density too small ({rho_in:.2e}), clamping to {epsilon}.")
+            if self._verbose:
+                print(f"Warning: Density too small ({rho_in:.2e}), clamping to {epsilon}.")
             rho_in = epsilon
         V_A = B_in / np.sqrt(4 * np.pi * rho_in)
         R = mean_EdotB * SPEED_OF_LIGHT / (B_in * V_A)
 
-        print(f"rho_in: {rho_in}, B_in: {B_in}")
-        print("  B mean:", np.mean(B_line, axis=0))
-        print(
-            "  rho plus:",
-            np.mean(point_data_plus[self._array_rho]),
-            "rho minus",
-            np.mean(point_data_minus[self._array_rho]),
-        )
-        print("  Bp mean:", np.mean(Bp, axis=0), "Bp norm:", np.linalg.norm(Bp, axis=1).mean())
-        print("  Bm mean:", np.mean(Bm, axis=0), "Bm norm:", np.linalg.norm(Bm, axis=1).mean())
-        print("  E mean:", np.mean(E_line, axis=0))
-        print("  f mean:", np.mean(f_vals), "f mid mean:", np.mean(f_mid))
-        print("  Alfvenic speed V_A:", V_A)
-        print("  Mean E·B:", mean_EdotB)
-        print("  Line segment length L:", L)
-        print("  Warp Δ:", delta)
-        print("  Eigenvector norm stats:", np.min(norms), np.max(norms))
-        print("  Warp Δ min/max:", np.sqrt(np.sum((pts - pts + delta * n_hat) ** 2, axis=1)).min())
-        print("  Reconnection rate R:", R)
+        if self._verbose:
+            print(" --- Reconnection Rate Computation ---")
+            print("Average Warp Δ:", np.sqrt(np.sum((pts - pts + delta * n_hat) ** 2, axis=1)).min())
+            print("B mean:", np.mean(B_line, axis=0))
+            print("E mean:", np.mean(E_line, axis=0))
+            print("Mean E·B:", mean_EdotB)
+            print("f mean:", np.mean(f_vals), "f mid mean:", np.mean(f_mid))
+            print("Line segment length L:", L)
+            print("Eigenvector norm stats:", np.min(norms), np.max(norms))
+            print(
+                "rho plus:",
+                np.mean(point_data_plus[self._array_rho]),
+                "rho minus",
+                np.mean(point_data_minus[self._array_rho]),
+            )
+            print("Bp mean:", np.mean(Bp, axis=0), "Bp norm:", np.linalg.norm(Bp, axis=1).mean())
+            print("Bm mean:", np.mean(Bm, axis=0), "Bm norm:", np.linalg.norm(Bm, axis=1).mean())
+            print("Alfvenic speed V_A:", V_A)
+            print(f"rho_in: {rho_in}, B_in: {B_in}")
+            print("Reconnection rate R:", R)
 
         return R
 
@@ -221,7 +250,8 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
         out_pd = vtkPolyData.GetData(outInfo, 0)
         out_pd.ShallowCopy(xlines_all)
         pts = dsa.WrapDataObject(xlines_all).Points
-        print("Point extent:", np.min(pts, axis=0), "to", np.max(pts, axis=0))
+        if self._verbose:
+            print("Point extent:", np.min(pts, axis=0), "to", np.max(pts, axis=0))
 
         if self._clean_input:
             # create a new vtkCleanPolyData
@@ -255,13 +285,14 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
         if not all([grid_vtk, xlines_all]):
             return 1
         if not all([self._array_B, self._array_E, self._array_rho]):
-            print("Missing array selection.")
+            if self._verbose:
+                print("Warning: Magnetic field, electric field, or density array not set.")
             return 0
 
         num_cells = xlines_all.GetNumberOfCells()
         rates = np.full(xlines_all.GetNumberOfPoints(), 0.0)
 
-        for cell_id in range(num_cells):
+        for cell_id in tqdm.tqdm(range(num_cells)):
             id_list = vtkIdList()
             xlines_all.GetCellPoints(cell_id, id_list)
             point_ids = [id_list.GetId(i) for i in range(id_list.GetNumberOfIds())]
@@ -285,14 +316,27 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
             subline_vtk.SetLines(lines)
 
             R = self.compute_reconnection_rate_for_line(grid_vtk, subline_vtk, derivs)
-            print(f"Computed reconnection rate for cell {cell_id}: {R}")
             if np.isnan(R) or np.isinf(R) or R < 0:
-                print(f"Warning: Reconnection rate for cell {cell_id} is NaN, skipping.")
+                if self._verbose:
+                    print(f"Warning: Reconnection rate for cell {cell_id} is NaN, skipping.")
                 R = 0.0
 
             for pid in point_ids:
                 rates[pid] = R
-            print("\n")
+
+            if self._verbose:
+                print("\n")
+
+        # Get the current time step
+        if self._save:
+            if not os.path.exists(self._save_path):
+                os.makedirs(self._save_path)
+            time_step = pv.GetAnimationScene().TimeKeeper.Time
+            np.savetxt(
+                os.path.join(self._save_path, f"reconnection_rates_step_{str(int(time_step)).zfill(4)}.txt"), rates
+            )
+            if self._verbose:
+                print(f"Saving reconnection rates to {self._save_path}")
 
         rate_array = numpy_support.numpy_to_vtk(rates, deep=True, array_type=VTK_FLOAT)
         rate_array.SetName("ReconnectionRate")

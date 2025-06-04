@@ -335,8 +335,7 @@ class mrvisReconnectionRate(VTKPythonAlgorithmBase):
             np.savetxt(
                 os.path.join(self._save_path, f"reconnection_rates_step_{str(int(time_step)).zfill(4)}.txt"), rates
             )
-            if self._verbose:
-                print(f"Saving reconnection rates to {self._save_path}")
+            print(f"Saving reconnection rates to {self._save_path}")
 
         rate_array = numpy_support.numpy_to_vtk(rates, deep=True, array_type=VTK_FLOAT)
         rate_array.SetName("ReconnectionRate")

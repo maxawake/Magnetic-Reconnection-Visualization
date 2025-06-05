@@ -14,10 +14,10 @@ if src_path not in sys.path:
 from mrvis.plugins.decorators import smproperty_inputarray
 
 
-@smproxy.filter(label="MRVIS Pseudo Bifurcation Lines")
+@smproxy.filter(label="MRVIS Quasi X Lines")
 @smproperty.input(name="Input", port_index=0)
 @smdomain.datatype(dataTypes=["vtkDataSet"])
-class mrvisPseudoBifurcationLine(VTKPythonAlgorithmBase):
+class mrvisQuasiXLines(VTKPythonAlgorithmBase):
     def __init__(self):
         self._array_field = 0
         self._array_name = None

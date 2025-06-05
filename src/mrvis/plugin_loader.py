@@ -12,7 +12,7 @@ plugin_list = [
     "mrvisShearLayer.py",
     "mrvisCoordinateAxes.py",
     "mrvisParallelVectorsPython.py",
-    "mrvisPseudoBifurcationLine.py",
+    "mrvisQuasiXLines.py",
     "mrvisStreamTube.py",
     "mrvisEigenvalues.py",
     "mrvisReconnectionRate.py",

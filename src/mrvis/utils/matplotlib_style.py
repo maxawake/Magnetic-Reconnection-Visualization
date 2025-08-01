@@ -21,7 +21,7 @@ def gcolor(color):
     elif color == "green":
         c = "#34a853"
     elif color == "violet":
-        c = "#673ab7"
+        c = "#886eb7"
     else:
         Exception(f"Unknown color: {color}")
     return c
